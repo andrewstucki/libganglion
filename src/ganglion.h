@@ -31,13 +31,14 @@ struct ganglion_consumer {
   int worker_size;
   const char * topic;
   const char * group;
-  void (* callback)(struct ganglion_consumer * self, char *, int, long);
+  void (* callback)(void *, char *, int, long);
 
   struct ganglion_thread_status ** worker_statuses;
   pthread_t * workers;
 
   volatile sig_atomic_t status;
 
+  void * context;
   void * opaque;
 };
 
@@ -52,7 +53,7 @@ struct ganglion_supervisor {
   volatile sig_atomic_t status;
 };
 
-struct ganglion_consumer * ganglion_consumer_new(const char *, int, const char *, const char *, void (*)(struct ganglion_consumer * self, char *, int, long));
+struct ganglion_consumer * ganglion_consumer_new(const char *, int, const char *, const char *, void *, void (*)(void *, char *, int, long));
 void ganglion_consumer_cleanup(struct ganglion_consumer *);
 void ganglion_consumer_start(struct ganglion_consumer *);
 void ganglion_consumer_stop(struct ganglion_consumer *);

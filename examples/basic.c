@@ -21,7 +21,8 @@ void handle_shutdown(int signo) {
   running = 0;
 }
 
-void handle_message(struct ganglion_consumer * self, char * payload, int partition, long offset) {
+void handle_message(void * consumer, char * payload, int partition, long offset) {
+  struct ganglion_consumer * self = (struct ganglion_consumer *)consumer;
   printf("Topic %s received message %s with offset %ld from partition %d\n", self->topic, payload, offset, partition);
 }
 
@@ -30,8 +31,8 @@ int main (int argc, char *argv[])
   signal(SIGINT, handle_shutdown);
 
   supervisor = ganglion_supervisor_new();
-  consumer_one = ganglion_consumer_new("localhost:9092", 400, "analytics", "libganglion2.analytics", handle_message);
-  consumer_two = ganglion_consumer_new("localhost:9092", 10, "stream", "libganglion2.stream", handle_message);
+  consumer_one = ganglion_consumer_new("localhost:9092", 400, "analytics", "libganglion2.analytics", NULL, handle_message);
+  consumer_two = ganglion_consumer_new("localhost:9092", 10, "stream", "libganglion2.stream", NULL, handle_message);
 
   ganglion_supervisor_register(supervisor, consumer_one);
   ganglion_supervisor_register(supervisor, consumer_two);

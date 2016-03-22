@@ -42,7 +42,7 @@ void * ganglion_worker_thread(void * args) {
   struct ganglion_kafka_internal_message * consumer_message = (struct ganglion_kafka_internal_message *)args;
 
   assert(consumer_message->consumer->callback != NULL);
-  (consumer_message->consumer->callback)(consumer_message->consumer, consumer_message->payload, consumer_message->partition, consumer_message->offset);
+  (consumer_message->consumer->callback)(consumer_message->consumer->context, consumer_message->payload, consumer_message->partition, consumer_message->offset);
 
   free(consumer_message->payload);
   free(consumer_message);
@@ -162,9 +162,15 @@ void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, stru
 }
 
 //Consumer functions
-struct ganglion_consumer * ganglion_consumer_new(const char * brokers, int workers, const char * topic, const char * group, void (* callback)(struct ganglion_consumer *, char *, int, long)) {
+struct ganglion_consumer * ganglion_consumer_new(const char * brokers, int workers, const char * topic, const char * group, void * context, void (* callback)(void *, char *, int, long)) {
   struct ganglion_consumer * self = (struct ganglion_consumer *)malloc(sizeof(struct ganglion_consumer));
   assert(self != NULL);
+
+  if (context == NULL) {
+    self->context = self;
+  } else {
+    self->context = context;
+  }
 
   assert((self->workers = (pthread_t *)malloc(sizeof(pthread_t) * workers)) != NULL);
 
