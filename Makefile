@@ -20,7 +20,7 @@ build/libganglion.a: deps/librdkafka-0.9.0.99/src/librdkafka.a build/ganglion_co
 	mkdir -p build/libs
 	cd build/libs && ar -x ../../deps/librdkafka-0.9.0.99/src/librdkafka.a
 	cd build/libs && cp ../ganglion_consumer.o .
-	cd build/libs && cp ../supervisor.o .
+	cd build/libs && cp ../ganglion_supervisor.o .
 	cd build/libs && ar -r ../libganglion.a *.o
 
 example: build/libganglion.a
