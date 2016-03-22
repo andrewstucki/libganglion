@@ -4,6 +4,10 @@
 #include <signal.h>
 #include <pthread.h>
 
+#ifndef GANGLION_DEBUG
+#define GANGLION_DEBUG 0
+#endif
+
 // Structs for threads (either workers or consumers)
 enum ganglion_thread_finished_status {
   GANGLION_THREAD_INITIALIZED,

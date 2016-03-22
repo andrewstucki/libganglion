@@ -42,6 +42,10 @@ void * ganglion_worker_thread(void * args) {
   struct ganglion_kafka_internal_message * consumer_message = (struct ganglion_kafka_internal_message *)args;
 
   assert(consumer_message->consumer->callback != NULL);
+
+  if (GANGLION_DEBUG)
+    printf("Invoking callback for topic: %s\n", consumer_message->consumer->topic);
+
   (consumer_message->consumer->callback)(consumer_message->consumer->context, consumer_message->payload, consumer_message->partition, consumer_message->offset);
 
   free(consumer_message->payload);
@@ -88,6 +92,8 @@ void ganglion_kafka_internal_initialize(struct ganglion_kafka_internal * self, c
 
 void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, struct ganglion_consumer *consumer) {
   int i, j;
+  if (GANGLION_DEBUG)
+    printf("Beginning consumption of topic: %s\n", consumer->topic);
   pthread_attr_t attr;
   rd_kafka_topic_partition_list_t *topic_partition_list;
   rd_kafka_topic_partition_t *topic_partition;
@@ -99,6 +105,8 @@ void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, stru
   assert(!rd_kafka_subscribe(self->consumer, self->topics));
 
   while (consumer->status != GANGLION_THREAD_CANCELED && consumer->status != GANGLION_THREAD_ERROR) {
+    if (GANGLION_DEBUG)
+      printf("Main consumer loop for topic: %s\n", consumer->topic);
     for (i = 0; i < consumer->worker_size; i++) {
       rd_kafka_message_t *message;
       consumer->workers[i] = NULL;
@@ -114,6 +122,9 @@ void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, stru
         char * payload = (char *)malloc(sizeof(char) * (message->len + 1));
         memcpy(payload, message->payload, message->len);
         payload[message->len] = '\0';
+
+        if (GANGLION_DEBUG)
+          printf("Topic: %s, received message: %s\n", consumer->topic, payload);
 
         struct ganglion_kafka_internal_message * consumer_message = (struct ganglion_kafka_internal_message *)malloc(sizeof(struct ganglion_kafka_internal_message));
         consumer_message->payload = payload;
