@@ -16,7 +16,6 @@ void ganglion_consumer_thread_cleanup(void * args) {
 }
 
 void * ganglion_consumer_thread(void * args) {
-  double result = 0.0;
   struct ganglion_thread_status * status = (struct ganglion_thread_status *)args;
 
   pthread_cleanup_push(ganglion_consumer_thread_cleanup, args);
