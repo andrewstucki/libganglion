@@ -16,7 +16,6 @@ struct ganglion_kafka_internal {
   rd_kafka_conf_t *config;
   rd_kafka_topic_conf_t *topic_config;
   rd_kafka_topic_partition_list_t *topics;
-  volatile sig_atomic_t initialized;
 };
 
 struct ganglion_kafka_internal_message {
@@ -69,12 +68,10 @@ struct ganglion_kafka_internal * ganglion_kafka_internal_new() {
 }
 
 void ganglion_kafka_internal_cleanup(struct ganglion_kafka_internal * kafka) {
-  assert(!rd_kafka_consumer_close(kafka->consumer));
+  // rd_kafka_topic_conf_destroy(kafka->topic_config);
+  // rd_kafka_conf_destroy(kafka->config);
   rd_kafka_topic_partition_list_destroy(kafka->topics);
   rd_kafka_destroy(kafka->consumer);
-  int shutdown_loops = 5;
-  while (shutdown_loops-- > 0 && rd_kafka_wait_destroyed(1000) == -1)
-    printf("Waiting for librdkafka to decommission\n");
 }
 
 void ganglion_kafka_internal_set_group(struct ganglion_kafka_internal * self, const char * group) {
@@ -169,6 +166,8 @@ void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, stru
   }
 
   pthread_attr_destroy(&attr);
+  assert(!rd_kafka_consumer_close(self->consumer));
+  // printf("freeing partition list\n");
   rd_kafka_topic_partition_list_destroy(topic_partition_list);
 }
 

@@ -4,6 +4,8 @@
 #include <assert.h>
 #include <math.h>
 
+#include <rdkafka.h>
+
 #include "ganglion.h"
 
 //Supervisor functions
@@ -131,4 +133,10 @@ void ganglion_supervisor_cleanup(struct ganglion_supervisor * supervisor) {
   free(supervisor->consumers);
   free(supervisor);
   supervisor = NULL;
+
+  rd_kafka_wait_destroyed(2000);
+  int dangling_threads = rd_kafka_thread_cnt();
+  if (dangling_threads > 0) {
+    printf("Failed to clean up librdkafka, terminating, threads still in use: %d\n", dangling_threads);
+  }
 }

@@ -31,8 +31,8 @@ int main (int argc, char *argv[])
   signal(SIGINT, handle_shutdown);
 
   supervisor = ganglion_supervisor_new();
-  consumer_one = ganglion_consumer_new("localhost:9092", 400, "analytics", "libganglion2.analytics", NULL, handle_message);
-  consumer_two = ganglion_consumer_new("localhost:9092", 10, "stream", "libganglion2.stream", NULL, handle_message);
+  consumer_one = ganglion_consumer_new("localhost:9092", 400, "analytics", "libganglion.analytics", NULL, handle_message);
+  consumer_two = ganglion_consumer_new("localhost:9092", 10, "stream", "libganglion.stream", NULL, handle_message);
 
   ganglion_supervisor_register(supervisor, consumer_one);
   ganglion_supervisor_register(supervisor, consumer_two);
