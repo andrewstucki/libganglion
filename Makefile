@@ -1,41 +1,49 @@
-CFLAGS=-Wall -Werror
+CC = gcc
+CFLAGS = -Wall -Werror -I./build/libs -I./build
+LDFLAGS = -lpthread -lz
 
-all: deps/librdkafka-0.9.0.99/src/librdkafka.a example
+SOURCE_DIR = src
+BUILD_DIR = build
+
+SOURCES = ganglion_consumer.c ganglion_producer.c ganglion_supervisor.c
+OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
+
+RDKAFKA_VERSION = 0.9.0.99
+OPENSSL_LIBS = $(shell pkg-config --libs openssl)
+
+all: $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/example
+
+$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
+	$(CC) -c $(CFLAGS) $< -o $@
 
 deps:
 	mkdir deps
-	curl -L https://github.com/edenhill/librdkafka/archive/0.9.0.99.tar.gz -o deps/librdkafka-0.9.0.99.tar.gz
-	cd deps && tar xvzf librdkafka-0.9.0.99.tar.gz
+	curl -L https://github.com/edenhill/librdkafka/archive/$(RDKAFKA_VERSION).tar.gz -o deps/librdkafka-$(RDKAFKA_VERSION).tar.gz
+	cd deps; \
+	tar xvzf librdkafka-$(RDKAFKA_VERSION).tar.gz
 
-deps/librdkafka-0.9.0.99/src/librdkafka.a: deps
-	cd deps/librdkafka-0.9.0.99 && ./configure && make
+$(BUILD_DIR)/libs/librdkafka.a: deps
+	mkdir -p $(BUILD_DIR)/libs
+	cd deps/librdkafka-$(RDKAFKA_VERSION); \
+	./configure --disable-sasl; \
+	$(MAKE); \
+	cp $(SOURCE_DIR)/rdkafka.h ../../$(BUILD_DIR)/libs; \
+	cp $(SOURCE_DIR)/librdkafka.a ../../$(BUILD_DIR)/libs
 
-build/ganglion_consumer.o:
-	mkdir -p build
-	cd build && gcc $(CFLAGS) -c ../src/ganglion_consumer.c -I../deps/librdkafka-0.9.0.99/src
+$(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/libs/librdkafka.a $(OBJECTS)
+	cd $(BUILD_DIR)/libs; \
+	ar -x librdkafka.a; \
+	ar -r ../libganglion.a *.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS))
 
-build/ganglion_supervisor.o:
-	mkdir -p build
-	cd build && gcc $(CFLAGS) -c ../src/ganglion_supervisor.c -I../deps/librdkafka-0.9.0.99/src
+$(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a examples/basic.c
+	$(CC) -c $(CFLAGS) examples/basic.c -o $(BUILD_DIR)/example.o
+	$(CC) -o $(BUILD_DIR)/example $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
+	strip $(BUILD_DIR)/example
 
-build/ganglion_producer.o:
-	mkdir -p build
-	cd build && gcc $(CFLAGS) -c ../src/ganglion_producer.c -I../deps/librdkafka-0.9.0.99/src
+.PHONY: clean distclean
 
-build/libganglion.a: deps/librdkafka-0.9.0.99/src/librdkafka.a build/ganglion_producer.o build/ganglion_consumer.o build/ganglion_supervisor.o
-	mkdir -p build/libs
-	cd build/libs && ar -x ../../deps/librdkafka-0.9.0.99/src/librdkafka.a
-	cd build/libs && cp ../ganglion_consumer.o .
-	cd build/libs && cp ../ganglion_producer.o .
-	cd build/libs && cp ../ganglion_supervisor.o .
-	cd build/libs && ar -r ../libganglion.a *.o
-
-example: build/libganglion.a
-	cd build && gcc $(CFLAGS) -c ../examples/basic.c -I../deps/librdkafka-0.9.0.99/src
-	cd build && gcc $(CFLAGS) -o example basic.o libganglion.a -lcrypto -lssl -lpthread -lsasl2 -lz
-	strip build/example
-
-.PHONY: clean
+distclean:
+	rm -rf $(BUILD_DIR) deps
 
 clean:
-	rm -rf deps build
+	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/example $(BUILD_DIR)/libs/*.o

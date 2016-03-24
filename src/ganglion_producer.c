@@ -122,7 +122,7 @@ void ganglion_producer_cleanup(struct ganglion_producer * producer) {
   producer = NULL;
 }
 
-void ganglion_producer_publish(struct ganglion_producer * self, char * topic, char * payload, int length) {
+void ganglion_producer_publish(struct ganglion_producer * self, char * topic, char * payload, long long length) {
   struct ganglion_kafka_producer_internal * kafka = (struct ganglion_kafka_producer_internal *)self->opaque;
 
   rd_kafka_topic_t * kafka_topic = rd_kafka_topic_new(kafka->producer, topic, rd_kafka_topic_conf_dup(kafka->topic_config));

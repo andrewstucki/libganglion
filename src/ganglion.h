@@ -92,7 +92,7 @@ int ganglion_supervisor_is_started(struct ganglion_supervisor *);
 
 struct ganglion_producer * ganglion_producer_new(const char *, const char *, const char *, enum ganglion_producer_mode, int, int, void *, void (*)(void *, const char *, char *, int));
 void ganglion_producer_cleanup(struct ganglion_producer *);
-void ganglion_producer_publish(struct ganglion_producer *, char *, char *, int);
+void ganglion_producer_publish(struct ganglion_producer *, char *, char *, long long);
 
 void ganglion_shutdown();
 
