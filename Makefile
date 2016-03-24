@@ -33,7 +33,7 @@ else
 endif
 
 CMOCKA_VERSION = 1.0.1
-TEST_CFLAGS = -Wall -Werror -I./test-deps/cmocka-$(CMOCKA_VERSION)/include
+TEST_CFLAGS = -g -Wall -Werror -I./test-deps/cmocka-$(CMOCKA_VERSION)/include
 TEST_LDFLAGS = -L./build/tests -lcmocka
 TEST_SOURCES = ganglion_consumer_test.c ganglion_producer_test.c ganglion_supervisor_test.c ganglion_test_suite.c
 TEST_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
@@ -98,9 +98,9 @@ $(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/libs/librdkafka.a $(OBJECTS)
 $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a examples/basic.c
 	@echo "\033[1;4;32mCompiling basic example\033[0m"
 	@$(CC) -c $(CFLAGS) examples/basic.c -o $(BUILD_DIR)/example.o
-	@$(CC) -o $(BUILD_DIR)/example $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
+	@$(CC) -O3 -o $(BUILD_DIR)/example $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
 	@strip $(BUILD_DIR)/example
-	@echo "\033[36mDone compiling $<\033[0m"
+	@echo "\033[36mDone compiling $@\033[0m"
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
 	@echo "\033[1;4;32mCompiling $<\033[0m"
