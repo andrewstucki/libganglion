@@ -1,6 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Werror -I./build/libs -I./build
 LDFLAGS = -lpthread -lz
+PREFIX = /usr/local
 
 SOURCE_DIR = src
 BUILD_DIR = build
@@ -40,10 +41,17 @@ $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a examples/basic.c
 	$(CC) -o $(BUILD_DIR)/example $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
 	strip $(BUILD_DIR)/example
 
-.PHONY: clean distclean
+.PHONY: clean distclean install
 
 distclean:
 	rm -rf $(BUILD_DIR) deps
 
 clean:
 	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/example $(BUILD_DIR)/libs/*.o
+
+install: $(BUILD_DIR)/libganglion.a $(SOURCE_DIR)/ganglion.h
+	install -m 0644 $(SOURCE_DIR)/ganglion.h $(PREFIX)/include
+	install -m 0644 $(BUILD_DIR)/libganglion.a $(PREFIX)/lib
+
+uninstall:
+	rm -f $(PREFIX)/include/ganglion.h $(PREFIX)/lib/libganglion.a
