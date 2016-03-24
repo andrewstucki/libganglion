@@ -17,7 +17,8 @@ struct ganglion_kafka_producer_internal {
 void report_callback_wrapper(rd_kafka_t *kafka, const rd_kafka_message_t *message, void *context) {
   struct ganglion_producer * self = (struct ganglion_producer *)context;
   assert(self->report_callback != NULL);
-  //TODO: error handling
+  //TODO: error handling, maybe something like:
+  //if (message->err) (self->error_callback)(self->context, rd_kafka_topic_name(message->rkt), (char *)message->err, message->len);
   (self->report_callback)(self->context, rd_kafka_topic_name(message->rkt), (char *)message->payload, message->len);
 }
 

@@ -15,14 +15,16 @@ struct ganglion_consumer * consumer_one;
 struct ganglion_consumer * consumer_two;
 
 void handle_shutdown(int signo) {
+  ganglion_producer_cleanup(producer);
+
   if (ganglion_supervisor_is_started(supervisor)) {
     ganglion_supervisor_stop(supervisor);
 
-    ganglion_producer_cleanup(producer);
     ganglion_consumer_cleanup(consumer_two);
     ganglion_consumer_cleanup(consumer_one);
     ganglion_supervisor_cleanup(supervisor);
   }
+
   ganglion_shutdown();
 
   exit(0);
