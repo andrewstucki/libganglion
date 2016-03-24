@@ -20,6 +20,7 @@ struct ganglion_kafka_internal {
 
 struct ganglion_kafka_internal_message {
   char * payload;
+  int length;
   int partition;
   long offset;
   struct ganglion_consumer * consumer;
@@ -45,7 +46,7 @@ void * ganglion_worker_thread(void * args) {
   if (GANGLION_DEBUG)
     printf("Invoking callback for topic: %s\n", consumer_message->consumer->topic);
 
-  (consumer_message->consumer->callback)(consumer_message->consumer->context, consumer_message->payload, consumer_message->partition, consumer_message->offset);
+  (consumer_message->consumer->callback)(consumer_message->consumer->context, consumer_message->payload, consumer_message->length, consumer_message->partition, consumer_message->offset);
 
   free(consumer_message->payload);
   free(consumer_message);
@@ -68,8 +69,6 @@ struct ganglion_kafka_internal * ganglion_kafka_internal_new() {
 }
 
 void ganglion_kafka_internal_cleanup(struct ganglion_kafka_internal * kafka) {
-  // rd_kafka_topic_conf_destroy(kafka->topic_config);
-  // rd_kafka_conf_destroy(kafka->config);
   rd_kafka_topic_partition_list_destroy(kafka->topics);
   rd_kafka_destroy(kafka->consumer);
 }
@@ -116,15 +115,16 @@ void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, stru
           goto done;
         }
 
-        char * payload = (char *)malloc(sizeof(char) * (message->len + 1));
-        memcpy(payload, message->payload, message->len);
-        payload[message->len] = '\0';
-
         if (GANGLION_DEBUG)
-          printf("Topic: %s, received message: %s\n", consumer->topic, payload);
+          printf("Topic: %s, received message\n", consumer->topic);
 
         struct ganglion_kafka_internal_message * consumer_message = (struct ganglion_kafka_internal_message *)malloc(sizeof(struct ganglion_kafka_internal_message));
+
+        char * payload = (char *)malloc(message->len + 1);
+        memcpy(payload, message->payload, message->len);
+
         consumer_message->payload = payload;
+        consumer_message->length = message->len;
         consumer_message->partition = message->partition;
         consumer_message->offset = message->offset;
         consumer_message->consumer = consumer;
@@ -172,7 +172,7 @@ void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, stru
 }
 
 //Consumer functions
-struct ganglion_consumer * ganglion_consumer_new(const char * brokers, int workers, const char * topic, const char * group, void * context, void (* callback)(void *, char *, int, long)) {
+struct ganglion_consumer * ganglion_consumer_new(const char * brokers, int workers, const char * topic, const char * group, void * context, void (* callback)(void *, char *, int, int, long)) {
   struct ganglion_consumer * self = (struct ganglion_consumer *)malloc(sizeof(struct ganglion_consumer));
   assert(self != NULL);
 

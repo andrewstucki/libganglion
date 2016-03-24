@@ -132,10 +132,13 @@ void ganglion_supervisor_cleanup(struct ganglion_supervisor * supervisor) {
   free(supervisor->consumers);
   free(supervisor);
   supervisor = NULL;
+}
 
+void ganglion_shutdown() {
+  printf("Shutting down libganglion\n");
   rd_kafka_wait_destroyed(2000);
   int dangling_threads = rd_kafka_thread_cnt();
   if (dangling_threads > 0) {
-    printf("Failed to clean up librdkafka, terminating, threads still in use: %d\n", dangling_threads);
+    printf("Failed to clean up kafka threads, terminating. Threads still in use: %d\n", dangling_threads);
   }
 }
