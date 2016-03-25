@@ -58,7 +58,7 @@ int main (int argc, char **argv) {
 
   supervisor = ganglion_supervisor_new();
 
-  producer = ganglion_producer_new("localhost:9092", "example", "none", GANGLION_PRODUCER_ASYNC, 1000, 100, NULL, handle_report);
+  producer = ganglion_producer_new("localhost:9092", "example", "none", 1000, 100, NULL, handle_report);
   consumer_one = ganglion_consumer_new("localhost:9092", 400, "analytics", "libganglion.analytics", NULL, handle_message);
   consumer_two = ganglion_consumer_new("localhost:9092", 10, "stream", "libganglion.stream", NULL, handle_message);
 

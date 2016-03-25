@@ -26,8 +26,6 @@ static enum ganglion_message_status ganglion_kafka_internal_check_message(rd_kaf
 static void * ganglion_worker_thread(void * args) {
   struct ganglion_kafka_internal_message * consumer_message = (struct ganglion_kafka_internal_message *)args;
 
-  assert(consumer_message->consumer->callback != NULL);
-
   if (GANGLION_DEBUG)
     printf("Invoking callback for topic: %s\n", consumer_message->consumer->topic);
 
@@ -164,6 +162,8 @@ static void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * sel
 
 //Consumer functions
 struct ganglion_consumer * ganglion_consumer_new(const char * brokers, int workers, const char * topic, const char * group, void * context, void (* callback)(void *, char *, int, int, long)) {
+  assert(callback != NULL);
+
   struct ganglion_consumer * self = (struct ganglion_consumer *)malloc(sizeof(struct ganglion_consumer));
   assert(self != NULL);
 

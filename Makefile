@@ -35,11 +35,11 @@ endif
 CMOCKA_VERSION = 1.0.1
 TEST_CFLAGS = -g -Wall -Werror -I./test-deps/cmocka-$(CMOCKA_VERSION)/include
 TEST_LDFLAGS = -L./build/tests -lcmocka
-TEST_SOURCES = ganglion_consumer_test.c ganglion_producer_test.c ganglion_supervisor_test.c ganglion_test_suite.c
+TEST_SOURCES = ganglion_consumer_test.c ganglion_producer_test.c ganglion_supervisor_test.c ganglion_test_helpers.c ganglion_test_suite.c
 TEST_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
 
 lib: clean $(BUILD_DIR)/libganglion.a
-example: $(BUILD_DIR)/example
+example: clean $(BUILD_DIR)/example
 
 tests: CFLAGS += -DUNIT_TESTING=1
 tests: clean $(BUILD_DIR)/tests/libganglion_test_suite

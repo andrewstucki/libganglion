@@ -131,7 +131,10 @@ struct ganglion_supervisor * ganglion_supervisor_new() {
 void ganglion_supervisor_cleanup(struct ganglion_supervisor * supervisor) {
   assert(supervisor->status != GANGLION_THREAD_STARTED);
 
-  free(supervisor->consumers);
+  if (supervisor->consumers != NULL) {
+    free(supervisor->consumers);
+  }
+  
   free(supervisor);
   supervisor = NULL;
 }
