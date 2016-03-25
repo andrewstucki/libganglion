@@ -16,6 +16,8 @@ func (t *testHandler) HandleMessage(message []byte, partition int, offset int) {
 }
 
 func main() {
+	defer ganglion.Shutdown()
+
 	supervisor := ganglion.CreateSupervisor()
 	consumerOne := ganglion.CreateConsumer("localhost:9092", 100, "analytics", "go_ganglion.analytics", &testHandler{})
 	consumerTwo := ganglion.CreateConsumer("localhost:9092", 100, "stream", "go_ganglion.analytics", &testHandler{})
@@ -41,9 +43,5 @@ func main() {
 		producer.Publish("analytics", []byte(text))
 	}
 
-	defer func() {
-		supervisor.Stop()
-
-		ganglion.Shutdown()
-	}()
+	supervisor.Stop()
 }
