@@ -1,16 +1,49 @@
 #ifndef ___GANGLION_INTERNAL_H__
 #define ___GANGLION_INTERNAL_H__
 
+#include <signal.h>
+#include <pthread.h>
 #include <rdkafka.h>
 
-struct ganglion_kafka_internal {
+// Structs for threads (either workers or consumers)
+enum ganglion_thread_finished_status {
+  GANGLION_THREAD_INITIALIZED,
+  GANGLION_THREAD_STARTED,
+  GANGLION_THREAD_FINISHED,
+  GANGLION_THREAD_CANCELED,
+  GANGLION_THREAD_ERROR
+};
+
+enum ganglion_message_status {
+  GANGLION_MSG_EOF,
+  GANGLION_MSG_ERROR,
+  GANGLION_MSG_UNKNOWN,
+  GANGLION_MSG_OK
+};
+
+struct ganglion_thread_status {
+  long thread_id;
+  volatile sig_atomic_t status;
+  void * context;
+};
+
+struct ganglion_consumer_internal {
+  void (* callback)(void *, char *, int, int, long);
+
+  void * context;
+
+  struct ganglion_thread_status ** worker_statuses;
+  pthread_t * workers;
+
+  volatile sig_atomic_t status;
+
   rd_kafka_t *consumer;
   rd_kafka_conf_t *config;
   rd_kafka_topic_conf_t *topic_config;
   rd_kafka_topic_partition_list_t *topics;
 };
 
-struct ganglion_kafka_internal_message {
+struct ganglion_consumer_internal_message {
   char * payload;
   int length;
   int partition;
@@ -18,12 +51,26 @@ struct ganglion_kafka_internal_message {
   struct ganglion_consumer * consumer;
 };
 
-struct ganglion_kafka_producer_internal {
+struct ganglion_producer_internal {
+  void (* report_callback)(void *, const char *, char *, int);
+
+  void * context;
+
+  pthread_t worker;
+  volatile sig_atomic_t status;
+
   rd_kafka_t *producer;
   rd_kafka_conf_t *config;
   rd_kafka_topic_conf_t *topic_config;
+};
 
-  pthread_t worker;
+struct ganglion_supervisor_internal {
+  int consumer_size;
+  struct ganglion_consumer ** consumers;
+  struct ganglion_thread_status ** consumer_statuses;
+  pthread_t * consumer_threads;
+
+  pthread_t monitor_thread;
   volatile sig_atomic_t status;
 };
 

@@ -8,13 +8,18 @@
 
 static void report_callback_wrapper(rd_kafka_t *kafka, const rd_kafka_message_t *message, void *context) {
   struct ganglion_producer * self = (struct ganglion_producer *)context;
+
+  assert(self);
+  struct ganglion_producer_internal * internal = (struct ganglion_producer_internal *)self->opaque;
+  assert(internal);
+
   //TODO: error handling, maybe something like:
-  //if (message->err) (self->error_callback)(self->context, rd_kafka_topic_name(message->rkt), (char *)message->err, message->len);
-  (self->report_callback)(self->context, rd_kafka_topic_name(message->rkt), (char *)message->payload, message->len);
+  //if (message->err) (internal->error_callback)(internal->context, rd_kafka_topic_name(message->rkt), (char *)message->err, message->len);
+  (internal->report_callback)(internal->context, rd_kafka_topic_name(message->rkt), (char *)message->payload, message->len);
 }
 
-static void * ganglion_kafka_producer_poller_thread(void * args) {
-  struct ganglion_kafka_producer_internal * producer = (struct ganglion_kafka_producer_internal *)args;
+static void * ganglion_producer_poller_thread(void * args) {
+  struct ganglion_producer_internal * producer = (struct ganglion_producer_internal *)args;
 
   while(producer->status != GANGLION_THREAD_CANCELED) {
     rd_kafka_poll(producer->producer, 1000);
@@ -23,9 +28,17 @@ static void * ganglion_kafka_producer_poller_thread(void * args) {
   pthread_exit(NULL);
 }
 
-static struct ganglion_kafka_producer_internal * ganglion_kafka_producer_internal_new(struct ganglion_producer * producer, const char * brokers) {
-  struct ganglion_kafka_producer_internal * self = (struct ganglion_kafka_producer_internal *)malloc(sizeof(struct ganglion_kafka_producer_internal));
+static struct ganglion_producer_internal * ganglion_producer_internal_new(struct ganglion_producer * producer, const char * brokers, void * context, void (*report_callback)(void *, const char *, char *, int)) {
+  struct ganglion_producer_internal * self = (struct ganglion_producer_internal *)malloc(sizeof(struct ganglion_producer_internal));
   assert(self != NULL);
+
+  if (context == NULL) {
+    self->context = self;
+  } else {
+    self->context = context;
+  }
+  // more stuff here
+  self->report_callback = report_callback;
 
   pthread_attr_t attr;
   pthread_attr_init(&attr);
@@ -39,10 +52,10 @@ static struct ganglion_kafka_producer_internal * ganglion_kafka_producer_interna
   rd_kafka_conf_set_log_cb(self->config, NULL);
 #endif
 
-  if (producer->report_callback != NULL) {
+  if (self->report_callback != NULL) {
     assert(rd_kafka_topic_conf_set(self->topic_config, "produce.offset.report", "true", NULL, 0) == RD_KAFKA_CONF_OK);
     rd_kafka_conf_set_dr_msg_cb(self->config, report_callback_wrapper);
-    rd_kafka_conf_set_opaque(self->config, producer->context);
+    rd_kafka_conf_set_opaque(self->config, self->context);
   }
 
   if (producer->queue_length > 0) {
@@ -60,7 +73,7 @@ static struct ganglion_kafka_producer_internal * ganglion_kafka_producer_interna
   assert(self->producer = rd_kafka_new(RD_KAFKA_PRODUCER, self->config, NULL, 0));
   assert(rd_kafka_brokers_add(self->producer, brokers) != 0);
 
-  assert(!pthread_create(&self->worker, &attr, ganglion_kafka_producer_poller_thread, (void *)self));
+  assert(!pthread_create(&self->worker, &attr, ganglion_producer_poller_thread, (void *)self));
 
   self->status = GANGLION_THREAD_STARTED;
   pthread_attr_destroy(&attr);
@@ -68,17 +81,17 @@ static struct ganglion_kafka_producer_internal * ganglion_kafka_producer_interna
   return self;
 }
 
-static void ganglion_kafka_producer_internal_cleanup(struct ganglion_producer * producer, struct ganglion_kafka_producer_internal * kafka) {
-  kafka->status = GANGLION_THREAD_CANCELED;
-  assert(!pthread_join(kafka->worker, NULL));
+static void ganglion_producer_internal_cleanup(struct ganglion_producer_internal * internal) {
+  internal->status = GANGLION_THREAD_CANCELED;
+  assert(!pthread_join(internal->worker, NULL));
 
-  while (rd_kafka_outq_len(kafka->producer) > 0)
-    rd_kafka_poll(kafka->producer, 100);
+  while (rd_kafka_outq_len(internal->producer) > 0)
+    rd_kafka_poll(internal->producer, 100);
 
-  rd_kafka_topic_conf_destroy(kafka->topic_config);
-  rd_kafka_destroy(kafka->producer);
-  free(kafka);
-  kafka = NULL;
+  rd_kafka_topic_conf_destroy(internal->topic_config);
+  rd_kafka_destroy(internal->producer);
+  free(internal);
+  internal = NULL;
 }
 
 struct ganglion_producer * ganglion_producer_new(const char *brokers, const char *id, const char *compression, int queue_length, int queue_flush_rate, void * context, void (*report_callback)(void *, const char *, char *, int)) {
@@ -86,37 +99,33 @@ struct ganglion_producer * ganglion_producer_new(const char *brokers, const char
   assert(self != NULL);
 
   self->id = id;
-
-  if (context == NULL) {
-    self->context = self;
-  } else {
-    self->context = context;
-  }
-
   self->queue_length = queue_length;
   self->queue_flush_rate = queue_flush_rate;
 
-  // more stuff here
-  self->report_callback = report_callback;
-
-  struct ganglion_kafka_producer_internal * kafka = ganglion_kafka_producer_internal_new(self, brokers);
-  self->opaque = (void *)kafka;
+  struct ganglion_producer_internal * internal = ganglion_producer_internal_new(self, brokers, context, report_callback);
+  self->opaque = (void *)internal;
 
   return self;
 }
 
 void ganglion_producer_cleanup(struct ganglion_producer * producer) {
+  assert(producer);
+  struct ganglion_producer_internal * internal = (struct ganglion_producer_internal *)producer->opaque;
+  assert(internal);
+
   if (GANGLION_DEBUG)
     printf("Cleaning up producer\n");
-  ganglion_kafka_producer_internal_cleanup(producer, (struct ganglion_kafka_producer_internal *)producer->opaque);
+  ganglion_producer_internal_cleanup(internal);
   free(producer);
   producer = NULL;
 }
 
 void ganglion_producer_publish(struct ganglion_producer * self, char * topic, char * payload, long long length) {
-  struct ganglion_kafka_producer_internal * kafka = (struct ganglion_kafka_producer_internal *)self->opaque;
+  assert(self);
+  struct ganglion_producer_internal * internal = (struct ganglion_producer_internal *)self->opaque;
+  assert(internal);
 
-  rd_kafka_topic_t * kafka_topic = rd_kafka_topic_new(kafka->producer, topic, rd_kafka_topic_conf_dup(kafka->topic_config));
+  rd_kafka_topic_t * kafka_topic = rd_kafka_topic_new(internal->producer, topic, rd_kafka_topic_conf_dup(internal->topic_config));
   assert(rd_kafka_produce(kafka_topic, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY, payload, length, NULL, 0, (void *)self) != -1);
   rd_kafka_topic_destroy(kafka_topic);
 }

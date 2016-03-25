@@ -10,7 +10,7 @@
 #include "ganglion.h"
 #include "_ganglion_internal.h"
 
-static enum ganglion_message_status ganglion_kafka_internal_check_message(rd_kafka_message_t *message) {
+static enum ganglion_message_status ganglion_consumer_internal_check_message(rd_kafka_message_t *message) {
   if (message->err && (message->err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION || message->err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)) {
     return GANGLION_MSG_ERROR;
   } else if (message->err && message->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
@@ -24,12 +24,13 @@ static enum ganglion_message_status ganglion_kafka_internal_check_message(rd_kaf
 }
 
 static void * ganglion_worker_thread(void * args) {
-  struct ganglion_kafka_internal_message * consumer_message = (struct ganglion_kafka_internal_message *)args;
+  struct ganglion_consumer_internal_message * consumer_message = (struct ganglion_consumer_internal_message *)args;
+  struct ganglion_consumer_internal * internal = (struct ganglion_consumer_internal *)consumer_message->consumer->opaque;
 
   if (GANGLION_DEBUG)
     printf("Invoking callback for topic: %s\n", consumer_message->consumer->topic);
 
-  (consumer_message->consumer->callback)(consumer_message->consumer->context, consumer_message->payload, consumer_message->length, consumer_message->partition, consumer_message->offset);
+  (internal->callback)(internal->context, consumer_message->payload, consumer_message->length, consumer_message->partition, consumer_message->offset);
 
   free(consumer_message->payload);
   free(consumer_message);
@@ -37,9 +38,18 @@ static void * ganglion_worker_thread(void * args) {
   pthread_exit(NULL);
 }
 
-static struct ganglion_kafka_internal * ganglion_kafka_internal_new() {
-  struct ganglion_kafka_internal * self = (struct ganglion_kafka_internal *)malloc(sizeof(struct ganglion_kafka_internal));
+static struct ganglion_consumer_internal * ganglion_consumer_internal_new(struct ganglion_consumer *consumer, int workers, void (* callback)(void *, char *, int, int, long), void *context) {
+  struct ganglion_consumer_internal * self = (struct ganglion_consumer_internal *)malloc(sizeof(struct ganglion_consumer_internal));
   assert(self != NULL);
+
+  assert((self->workers = (pthread_t *)malloc(sizeof(pthread_t) * workers)) != NULL);
+  self->status = GANGLION_THREAD_INITIALIZED;
+  self->callback = callback;
+  if (context == NULL) {
+    self->context = consumer;
+  } else {
+    self->context = context;
+  }
 
   self->config = rd_kafka_conf_new();
   self->topic_config = rd_kafka_topic_conf_new();
@@ -55,18 +65,23 @@ static struct ganglion_kafka_internal * ganglion_kafka_internal_new() {
   return self;
 }
 
-static void ganglion_kafka_internal_cleanup(struct ganglion_kafka_internal * kafka) {
-  rd_kafka_topic_partition_list_destroy(kafka->topics);
-  rd_kafka_destroy(kafka->consumer);
-  free(kafka);
-  kafka = NULL;
+static void ganglion_consumer_internal_cleanup(struct ganglion_consumer_internal * internal) {
+  assert(internal);
+  assert(internal->status != GANGLION_THREAD_STARTED);
+
+  rd_kafka_topic_partition_list_destroy(internal->topics);
+  rd_kafka_destroy(internal->consumer);
+
+  free(internal->workers);
+  free(internal);
+  internal = NULL;
 }
 
-static void ganglion_kafka_internal_set_group(struct ganglion_kafka_internal * self, const char * group) {
+static void ganglion_consumer_internal_set_group(struct ganglion_consumer_internal * self, const char * group) {
   assert(rd_kafka_conf_set(self->config, "group.id", group, NULL, 0) == RD_KAFKA_CONF_OK);
 }
 
-static void ganglion_kafka_internal_initialize(struct ganglion_kafka_internal * self, const char *brokers, const char *topic) {
+static void ganglion_consumer_internal_initialize(struct ganglion_consumer_internal * self, const char *brokers, const char *topic) {
   assert(self->consumer = rd_kafka_new(RD_KAFKA_CONSUMER, self->config, NULL, 0));
   rd_kafka_set_log_level(self->consumer, LOG_DEBUG);
   assert(rd_kafka_brokers_add(self->consumer, brokers) != 0);
@@ -75,7 +90,7 @@ static void ganglion_kafka_internal_initialize(struct ganglion_kafka_internal * 
   rd_kafka_topic_partition_list_add(self->topics, topic, -1);
 }
 
-static void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, struct ganglion_consumer *consumer) {
+static void ganglion_consumer_internal_consume(struct ganglion_consumer_internal * self, struct ganglion_consumer *consumer) {
   int i, j;
   if (GANGLION_DEBUG)
     printf("Beginning consumption of topic: %s\n", consumer->topic);
@@ -89,16 +104,16 @@ static void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * sel
   assert((topic_partition_list = rd_kafka_topic_partition_list_new(12)) != NULL);
   assert(!rd_kafka_subscribe(self->consumer, self->topics));
 
-  while (consumer->status != GANGLION_THREAD_CANCELED && consumer->status != GANGLION_THREAD_ERROR) {
+  while (self->status != GANGLION_THREAD_CANCELED && self->status != GANGLION_THREAD_ERROR) {
     if (GANGLION_DEBUG)
       printf("Main consumer loop for topic: %s\n", consumer->topic);
     for (i = 0; i < consumer->worker_size; i++) {
       rd_kafka_message_t *message;
-      consumer->workers[i] = NULL;
+      self->workers[i] = NULL;
       if ((message = rd_kafka_consumer_poll(self->consumer, 1000)) != NULL) {
-        enum ganglion_message_status message_check = ganglion_kafka_internal_check_message(message);
+        enum ganglion_message_status message_check = ganglion_consumer_internal_check_message(message);
         if (message_check == GANGLION_MSG_ERROR) {
-          consumer->status = GANGLION_THREAD_ERROR;
+          self->status = GANGLION_THREAD_ERROR;
           goto done;
         } else if (message_check == GANGLION_MSG_EOF || message_check == GANGLION_MSG_UNKNOWN) { //a non-abortable error
           goto done;
@@ -107,7 +122,7 @@ static void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * sel
         if (GANGLION_DEBUG)
           printf("Topic: %s, received message\n", consumer->topic);
 
-        struct ganglion_kafka_internal_message * consumer_message = (struct ganglion_kafka_internal_message *)malloc(sizeof(struct ganglion_kafka_internal_message));
+        struct ganglion_consumer_internal_message * consumer_message = (struct ganglion_consumer_internal_message *)malloc(sizeof(struct ganglion_consumer_internal_message));
 
         char * payload = (char *)malloc(message->len + 1);
         memcpy(payload, message->payload, message->len);
@@ -118,7 +133,7 @@ static void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * sel
         consumer_message->offset = message->offset;
         consumer_message->consumer = consumer;
 
-        assert(!pthread_create(&consumer->workers[i], &attr, ganglion_worker_thread, (void *)consumer_message));
+        assert(!pthread_create(&self->workers[i], &attr, ganglion_worker_thread, (void *)consumer_message));
 
       done:
         rd_kafka_message_destroy(message);
@@ -143,8 +158,8 @@ static void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * sel
       }
     }
     for (i = 0; i < consumer->worker_size; i++) {
-      if (consumer->workers[i] != NULL) {
-        assert(!pthread_join(consumer->workers[i], NULL));
+      if (self->workers[i] != NULL) {
+        assert(!pthread_join(self->workers[i], NULL));
       } else {
         break;
       }
@@ -167,54 +182,54 @@ struct ganglion_consumer * ganglion_consumer_new(const char * brokers, int worke
   struct ganglion_consumer * self = (struct ganglion_consumer *)malloc(sizeof(struct ganglion_consumer));
   assert(self != NULL);
 
-  if (context == NULL) {
-    self->context = self;
-  } else {
-    self->context = context;
-  }
-
-  assert((self->workers = (pthread_t *)malloc(sizeof(pthread_t) * workers)) != NULL);
-
   self->worker_size = workers;
   self->topic = topic;
   self->group = group;
-  self->status = GANGLION_THREAD_INITIALIZED;
-  self->callback = callback;
 
-  struct ganglion_kafka_internal * kafka = ganglion_kafka_internal_new();
-  ganglion_kafka_internal_set_group(kafka, group);
-  ganglion_kafka_internal_initialize(kafka, brokers, topic);
+  struct ganglion_consumer_internal * internal = ganglion_consumer_internal_new(self, workers, callback, context);
+  ganglion_consumer_internal_set_group(internal, group);
+  ganglion_consumer_internal_initialize(internal, brokers, topic);
 
-  self->opaque = (void *)kafka;
+  self->opaque = (void *)internal;
 
   return self;
 }
 
 void ganglion_consumer_cleanup(struct ganglion_consumer *consumer) {
-  assert(consumer->status != GANGLION_THREAD_STARTED);
+  assert(consumer);
 
-  ganglion_kafka_internal_cleanup((struct ganglion_kafka_internal *)consumer->opaque);
+  ganglion_consumer_internal_cleanup((struct ganglion_consumer_internal *)consumer->opaque);
 
-  free(consumer->workers);
   free(consumer);
   consumer = NULL;
 }
 
 void ganglion_consumer_start(struct ganglion_consumer *self) {
-  assert(self->status != GANGLION_THREAD_STARTED);
-  self->status = GANGLION_THREAD_STARTED;
-  ganglion_kafka_internal_consume((struct ganglion_kafka_internal *)self->opaque, self);
+  assert(self);
+  struct ganglion_consumer_internal * internal = (struct ganglion_consumer_internal *)self->opaque;
+  assert(internal);
+
+  assert(internal->status != GANGLION_THREAD_STARTED);
+  internal->status = GANGLION_THREAD_STARTED;
+  ganglion_consumer_internal_consume(internal, self);
 }
 
 void ganglion_consumer_wait(struct ganglion_consumer *self) {
+  assert(self);
+  struct ganglion_consumer_internal * internal = (struct ganglion_consumer_internal *)self->opaque;
+  assert(internal);
+
   for (int i = 0; i < self->worker_size; i++) {
-    if (self->workers[i] != NULL) {
-      pthread_join(self->workers[i], NULL);
+    if (internal->workers[i] != NULL) {
+      pthread_join(internal->workers[i], NULL);
     }
   }
 }
 
 void ganglion_consumer_stop(struct ganglion_consumer *self) {
-  assert(self->status == GANGLION_THREAD_STARTED);
-  self->status = GANGLION_THREAD_CANCELED; //stops loop;
+  struct ganglion_consumer_internal * internal;
+  assert(self);
+  assert((internal = (struct ganglion_consumer_internal *)self->opaque) != NULL);
+  assert(internal->status == GANGLION_THREAD_STARTED);
+  internal->status = GANGLION_THREAD_CANCELED; //stops loop;
 }

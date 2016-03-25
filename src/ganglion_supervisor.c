@@ -29,6 +29,10 @@ static void * ganglion_consumer_thread(void * args) {
 
 static void * ganglion_monitor_thread(void * args) {
   struct ganglion_supervisor * self = (struct ganglion_supervisor *) args;
+  assert(self);
+  struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
+  assert(internal);
+
   pthread_attr_t attr;
 
   pthread_attr_init(&attr);
@@ -37,14 +41,14 @@ static void * ganglion_monitor_thread(void * args) {
   struct timespec sleep_time = { 0, 500000000L };
   int i;
 
-  while(self->status == GANGLION_THREAD_STARTED) {
-    for (i = 0; i < self->consumer_size; i++) {
-      if (self->consumer_statuses[i]->status == GANGLION_THREAD_FINISHED) {
+  while(internal->status == GANGLION_THREAD_STARTED) {
+    for (i = 0; i < internal->consumer_size; i++) {
+      if (internal->consumer_statuses[i]->status == GANGLION_THREAD_FINISHED) {
         if (GANGLION_DEBUG)
           printf("Monitor found stopped thread: %d, restarting.\n", i);
-        self->consumers[i]->status = GANGLION_THREAD_FINISHED;
-        self->consumer_statuses[i]->status = GANGLION_THREAD_STARTED;
-        assert(!pthread_create(&self->consumer_threads[i], &attr, ganglion_consumer_thread, (void *)self->consumer_statuses[i]));
+        ((struct ganglion_consumer_internal *)internal->consumers[i]->opaque)->status = GANGLION_THREAD_FINISHED;
+        internal->consumer_statuses[i]->status = GANGLION_THREAD_STARTED;
+        assert(!pthread_create(&internal->consumer_threads[i], &attr, ganglion_consumer_thread, (void *)internal->consumer_statuses[i]));
       }
     }
     nanosleep(&sleep_time, NULL);
@@ -56,85 +60,110 @@ static void * ganglion_monitor_thread(void * args) {
 }
 
 void ganglion_supervisor_start(struct ganglion_supervisor * self) {
-  assert(self->status != GANGLION_THREAD_STARTED);
+  assert(self);
+  struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
+  assert(internal);
+
+  assert(internal->status != GANGLION_THREAD_STARTED);
 
   int i;
   pthread_attr_t attr;
 
-  assert((self->consumer_threads = (pthread_t *)malloc(sizeof(pthread_t) * self->consumer_size)) != NULL);
-  assert((self->consumer_statuses = (struct ganglion_thread_status **)malloc(sizeof(struct ganglion_thread_status *) * self->consumer_size)) != NULL);
+  assert((internal->consumer_threads = (pthread_t *)malloc(sizeof(pthread_t) * internal->consumer_size)) != NULL);
+  assert((internal->consumer_statuses = (struct ganglion_thread_status **)malloc(sizeof(struct ganglion_thread_status *) * internal->consumer_size)) != NULL);
 
   pthread_attr_init(&attr);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-  for (i = 0; i < self->consumer_size; i++) {
-    assert((self->consumer_statuses[i] = (struct ganglion_thread_status *)malloc(sizeof(struct ganglion_thread_status))) != NULL);
-    self->consumer_statuses[i]->thread_id = i;
-    self->consumer_statuses[i]->status = GANGLION_THREAD_STARTED;
-    self->consumer_statuses[i]->context = (void *)self->consumers[i];
-    assert(!pthread_create(&self->consumer_threads[i], &attr, ganglion_consumer_thread, (void *)self->consumer_statuses[i]));
+  for (i = 0; i < internal->consumer_size; i++) {
+    assert((internal->consumer_statuses[i] = (struct ganglion_thread_status *)malloc(sizeof(struct ganglion_thread_status))) != NULL);
+    internal->consumer_statuses[i]->thread_id = i;
+    internal->consumer_statuses[i]->status = GANGLION_THREAD_STARTED;
+    internal->consumer_statuses[i]->context = (void *)internal->consumers[i];
+    assert(!pthread_create(&internal->consumer_threads[i], &attr, ganglion_consumer_thread, (void *)internal->consumer_statuses[i]));
   }
 
-  assert(!pthread_create(&self->monitor_thread, &attr, ganglion_monitor_thread, (void *)self));
+  assert(!pthread_create(&internal->monitor_thread, &attr, ganglion_monitor_thread, (void *)self));
 
   pthread_attr_destroy(&attr);
 
-  self->status = GANGLION_THREAD_STARTED;
+  internal->status = GANGLION_THREAD_STARTED;
 }
 
 void ganglion_supervisor_stop(struct ganglion_supervisor * self) {
-  assert(self->status == GANGLION_THREAD_STARTED);
+  assert(self);
+  struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
+  assert(internal);
+
+  assert(internal->status == GANGLION_THREAD_STARTED);
 
   int i;
 
   if (GANGLION_DEBUG)
     printf("Stopping supervisor\n");
 
-  self->status = GANGLION_THREAD_CANCELED; //will stop the monitor thread
-  assert(!pthread_join(self->monitor_thread, NULL));
+  internal->status = GANGLION_THREAD_CANCELED; //will stop the monitor thread
+  assert(!pthread_join(internal->monitor_thread, NULL));
 
-  for (i = 0; i < self->consumer_size; i++) {
-    ganglion_consumer_stop(self->consumers[i]);
-    assert(!pthread_join(self->consumer_threads[i], NULL));
+  for (i = 0; i < internal->consumer_size; i++) {
+    ganglion_consumer_stop(internal->consumers[i]);
+    assert(!pthread_join(internal->consumer_threads[i], NULL));
   }
 
-  free(self->consumer_threads);
-  free(self->consumer_statuses);
+  free(internal->consumer_threads);
+  free(internal->consumer_statuses);
 }
 
 int ganglion_supervisor_register(struct ganglion_supervisor * self, struct ganglion_consumer * consumer) {
-  if (self->consumers == NULL) {
-    assert((self->consumers = (struct ganglion_consumer **)malloc(sizeof(struct ganglion_consumer *) * ++self->consumer_size)) != NULL);
+  assert(self);
+  struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
+  assert(internal);
+
+  if (internal->consumers == NULL) {
+    assert((internal->consumers = (struct ganglion_consumer **)malloc(sizeof(struct ganglion_consumer *) * ++internal->consumer_size)) != NULL);
   } else {
-    assert((self->consumers = (struct ganglion_consumer **)realloc(self->consumers, sizeof(struct ganglion_consumer *) * ++self->consumer_size)) != NULL);
+    assert((internal->consumers = (struct ganglion_consumer **)realloc(internal->consumers, sizeof(struct ganglion_consumer *) * ++internal->consumer_size)) != NULL);
   }
-  self->consumers[self->consumer_size - 1] = consumer;
-  return self->consumer_size;
+  internal->consumers[internal->consumer_size - 1] = consumer;
+  return internal->consumer_size;
 }
 
 int ganglion_supervisor_is_started(struct ganglion_supervisor * self) {
-  return self->status == GANGLION_THREAD_STARTED;
+  assert(self);
+  struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
+  assert(internal);
+
+  return internal->status == GANGLION_THREAD_STARTED;
 }
 
 struct ganglion_supervisor * ganglion_supervisor_new() {
   struct ganglion_supervisor * self = (struct ganglion_supervisor *)malloc(sizeof(struct ganglion_supervisor));
+  struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)malloc(sizeof(struct ganglion_supervisor_internal));
 
   assert(self != NULL);
+  assert(internal != NULL);
 
-  self->consumer_size = 0;
-  self->consumers = NULL;
-  self->status = GANGLION_THREAD_INITIALIZED;
+  internal->consumer_size = 0;
+  internal->consumers = NULL;
+  internal->status = GANGLION_THREAD_INITIALIZED;
+
+  self->opaque = (void *)internal;
 
   return self;
 }
 
 void ganglion_supervisor_cleanup(struct ganglion_supervisor * supervisor) {
-  assert(supervisor->status != GANGLION_THREAD_STARTED);
+  assert(supervisor);
+  struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)supervisor->opaque;
+  assert(internal);
 
-  if (supervisor->consumers != NULL) {
-    free(supervisor->consumers);
+  assert(internal->status != GANGLION_THREAD_STARTED);
+
+  if (internal->consumers != NULL) {
+    free(internal->consumers);
   }
-  
+
+  free(supervisor->opaque);
   free(supervisor);
   supervisor = NULL;
 }

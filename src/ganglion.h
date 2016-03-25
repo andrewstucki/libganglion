@@ -8,53 +8,18 @@
 #define GANGLION_DEBUG 0
 #endif
 
-// Structs for threads (either workers or consumers)
-enum ganglion_thread_finished_status {
-  GANGLION_THREAD_INITIALIZED,
-  GANGLION_THREAD_STARTED,
-  GANGLION_THREAD_FINISHED,
-  GANGLION_THREAD_CANCELED,
-  GANGLION_THREAD_ERROR
-};
-
-enum ganglion_message_status {
-  GANGLION_MSG_EOF,
-  GANGLION_MSG_ERROR,
-  GANGLION_MSG_UNKNOWN,
-  GANGLION_MSG_OK
-};
-
-struct ganglion_thread_status {
-  long thread_id;
-  volatile sig_atomic_t status;
-  void * context;
-};
-
 // Structs for consumer
 struct ganglion_consumer {
   int worker_size;
   const char * topic;
   const char * group;
-  void (* callback)(void *, char *, int, int, long);
 
-  struct ganglion_thread_status ** worker_statuses;
-  pthread_t * workers;
-
-  volatile sig_atomic_t status;
-
-  void * context;
-  void * opaque;
+  void *opaque;
 };
 
 // Structs for supervisor
 struct ganglion_supervisor {
-  int consumer_size;
-  struct ganglion_consumer ** consumers;
-  struct ganglion_thread_status ** consumer_statuses;
-  pthread_t * consumer_threads;
-
-  pthread_t monitor_thread;
-  volatile sig_atomic_t status;
+  void *opaque;
 };
 
 // Structs for producer
@@ -62,13 +27,10 @@ struct ganglion_producer {
   const char * id;
   const char * compression;
 
-  // async producer
   int queue_length; // batch.num.messages
   int queue_flush_rate; // queue.buffering.max.ms
-  void (* report_callback)(void *, const char *, char *, int);
 
-  void * context;
-  void * opaque;
+  void *opaque;
 };
 
 struct ganglion_consumer * ganglion_consumer_new(const char *, int, const char *, const char *, void *, void (*)(void *, char *, int, int, long));
