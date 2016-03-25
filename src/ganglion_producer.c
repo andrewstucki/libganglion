@@ -33,7 +33,7 @@ static struct ganglion_producer_internal * ganglion_producer_internal_new(struct
   assert(self != NULL);
 
   if (context == NULL) {
-    self->context = self;
+    self->context = producer;
   } else {
     self->context = context;
   }

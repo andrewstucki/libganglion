@@ -20,7 +20,7 @@ void test_ganglion_producer_new_no_context(void **state) {
 
   struct ganglion_producer_internal * internal = (struct ganglion_producer_internal *)producer->opaque;
   assert_ptr_equal(internal->report_callback, test_producer_noop_callback);
-  assert_ptr_equal(internal->context, internal);
+  assert_ptr_equal(internal->context, producer);
 
   ganglion_producer_cleanup(producer);
   ganglion_shutdown();
