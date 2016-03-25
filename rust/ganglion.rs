@@ -26,6 +26,7 @@ struct CGanglionProducer {
     compression: *const c_char,
     queue_length: c_int,
     queue_flush_rate: c_int,
+    
     opaque: *mut c_void
 }
 

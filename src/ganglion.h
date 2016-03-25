@@ -1,13 +1,6 @@
 #ifndef __GANGLION_H__
 #define __GANGLION_H__
 
-#include <signal.h>
-#include <pthread.h>
-
-#ifndef GANGLION_DEBUG
-#define GANGLION_DEBUG 0
-#endif
-
 // Structs for consumer
 struct ganglion_consumer {
   int worker_size;

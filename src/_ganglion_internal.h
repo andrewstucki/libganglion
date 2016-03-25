@@ -1,6 +1,10 @@
 #ifndef ___GANGLION_INTERNAL_H__
 #define ___GANGLION_INTERNAL_H__
 
+#ifndef GANGLION_DEBUG
+#define GANGLION_DEBUG 0
+#endif
+
 #include <signal.h>
 #include <pthread.h>
 #include <rdkafka.h>
