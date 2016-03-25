@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	ganglion ".."
+	ganglion "github.com/andrewstucki/libganglion/go"
 )
 
 type testHandler struct{}

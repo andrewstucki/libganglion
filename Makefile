@@ -105,9 +105,10 @@ $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a examples/basic.c
 	@strip $(BUILD_DIR)/example
 	@echo "\033[36mDone compiling $@\033[0m"
 
-$(BUILD_DIR)/go-example: go/examples/basic.go
+$(BUILD_DIR)/go-example: examples/basic.go
 	@echo "\033[1;4;32mCompiling basic go example\033[0m"
-	@go build -o $@ go/examples/basic.go
+	@go get github.com/andrewstucki/libganglion/go
+	@go build -o $@ examples/basic.go
 	@echo "\033[36mDone compiling $@\033[0m"
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
