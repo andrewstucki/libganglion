@@ -1,16 +1,13 @@
 package ganglion
 
 /*
-#cgo CFLAGS: -I/Users/andrewstucki/Code/libganglion/src
-#cgo LDFLAGS: /Users/andrewstucki/Code/libganglion/build/libganglion.a -lz -lpthread
+#cgo pkg-config: libganglion
 #include <ganglion.h>
 
 extern void cgo_producer_report_callback_wrapper(void * context, const char *topic, char *message, int message_len);
 extern void cgo_consumer_message_callback_wrapper(void * context, char *message, int message_len, int partition, long offset);
 */
 import "C"
-
-// #cgo pkg-config: libganglion
 
 import (
 	"runtime"

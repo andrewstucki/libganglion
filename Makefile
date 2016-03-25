@@ -40,7 +40,7 @@ TEST_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
 
 lib: clean $(BUILD_DIR)/libganglion.a
 example: clean $(BUILD_DIR)/example
-go-example: clean $(BUILD_DIR)/go-example
+go-example: $(BUILD_DIR)/go-example
 
 tests: CFLAGS += -DUNIT_TESTING=1
 tests: clean $(BUILD_DIR)/tests/libganglion_test_suite
@@ -105,7 +105,7 @@ $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a examples/basic.c
 	@strip $(BUILD_DIR)/example
 	@echo "\033[36mDone compiling $@\033[0m"
 
-$(BUILD_DIR)/go-example: $(BUILD_DIR)/libganglion.a go/examples/basic.go
+$(BUILD_DIR)/go-example: go/examples/basic.go
 	@echo "\033[1;4;32mCompiling basic go example\033[0m"
 	@go build -o $@ go/examples/basic.go
 	@echo "\033[36mDone compiling $@\033[0m"
@@ -140,6 +140,7 @@ clean:
 install: $(BUILD_DIR)/libganglion.a $(SOURCE_DIR)/ganglion.h
 	install -m 0644 $(SOURCE_DIR)/ganglion.h $(PREFIX)/include
 	install -m 0644 $(BUILD_DIR)/libganglion.a $(PREFIX)/lib
+	install -m 0644 $(SOURCE_DIR)/libganglion.pc $(PREFIX)/lib/pkgconfig/
 
 uninstall:
 	rm -f $(PREFIX)/include/ganglion.h $(PREFIX)/lib/libganglion.a

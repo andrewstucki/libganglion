@@ -33,13 +33,10 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		text, err = reader.ReadString('\n')
-
 		text = strings.TrimSpace(text)
-
 		if err != nil || text == "quit" {
 			break
 		}
-
 		producer.Publish("analytics", []byte(text))
 	}
 
