@@ -38,9 +38,11 @@ TEST_LDFLAGS = -L./build/tests -lcmocka
 TEST_SOURCES = ganglion_consumer_test.c ganglion_producer_test.c ganglion_supervisor_test.c ganglion_test_suite.c
 TEST_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
 
-lib: $(BUILD_DIR)/libganglion.a
+lib: clean $(BUILD_DIR)/libganglion.a
 example: $(BUILD_DIR)/example
-tests: $(BUILD_DIR)/tests/libganglion_test_suite
+
+tests: CFLAGS += -DUNIT_TESTING=1
+tests: clean $(BUILD_DIR)/tests/libganglion_test_suite
 
 deps:
 	@echo "\033[1;4;32mDownloading dependant libraries\033[0m"
@@ -121,7 +123,7 @@ $(BUILD_DIR)/tests/libganglion_test_suite: $(TEST_OBJECTS) $(BUILD_DIR)/libgangl
 
 run-tests: tests
 	@echo "\033[1;4;32mRunning libganglion test suite\033[0m"
-	@./$(BUILD_DIR)/tests/libganglion_test_suite
+	@CMOCKA_TEST_ABORT='1' ./$(BUILD_DIR)/tests/libganglion_test_suite #needed for threading
 
 distclean:
 	rm -rf $(BUILD_DIR) deps test-deps

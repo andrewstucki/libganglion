@@ -5,3 +5,4 @@
 #include <cmocka.h>
 
 #include <ganglion.h>
+#include "../src/_ganglion_internal.h"

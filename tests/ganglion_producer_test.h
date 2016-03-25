@@ -1,4 +1,5 @@
-#ifndef __GANGLION_PRODUCER_TEST__H__
+#ifndef __GANGLION_PRODUCER_TEST_H__
 #define __GANGLION_PRODUCER_TEST_H__
 
-#endif
+
+#endif // __GANGLION_PRODUCER_TEST_H__

@@ -4,17 +4,9 @@
 #include <rdkafka.h>
 
 #include "ganglion.h"
+#include "_ganglion_internal.h"
 
-struct ganglion_kafka_producer_internal {
-  rd_kafka_t *producer;
-  rd_kafka_conf_t *config;
-  rd_kafka_topic_conf_t *topic_config;
-
-  pthread_t worker;
-  volatile sig_atomic_t status;
-};
-
-void report_callback_wrapper(rd_kafka_t *kafka, const rd_kafka_message_t *message, void *context) {
+static void report_callback_wrapper(rd_kafka_t *kafka, const rd_kafka_message_t *message, void *context) {
   struct ganglion_producer * self = (struct ganglion_producer *)context;
   assert(self->report_callback != NULL);
   //TODO: error handling, maybe something like:
@@ -22,7 +14,7 @@ void report_callback_wrapper(rd_kafka_t *kafka, const rd_kafka_message_t *messag
   (self->report_callback)(self->context, rd_kafka_topic_name(message->rkt), (char *)message->payload, message->len);
 }
 
-void * ganglion_kafka_producer_poller_thread(void * args) {
+static void * ganglion_kafka_producer_poller_thread(void * args) {
   struct ganglion_kafka_producer_internal * producer = (struct ganglion_kafka_producer_internal *)args;
 
   while(producer->status != GANGLION_THREAD_CANCELED) {
@@ -32,7 +24,7 @@ void * ganglion_kafka_producer_poller_thread(void * args) {
   pthread_exit(NULL);
 }
 
-struct ganglion_kafka_producer_internal * ganglion_kafka_producer_internal_new(struct ganglion_producer * producer, const char * brokers) {
+static struct ganglion_kafka_producer_internal * ganglion_kafka_producer_internal_new(struct ganglion_producer * producer, const char * brokers) {
   struct ganglion_kafka_producer_internal * self = (struct ganglion_kafka_producer_internal *)malloc(sizeof(struct ganglion_kafka_producer_internal));
   assert(self != NULL);
 
@@ -73,7 +65,7 @@ struct ganglion_kafka_producer_internal * ganglion_kafka_producer_internal_new(s
   return self;
 }
 
-void ganglion_kafka_producer_internal_cleanup(struct ganglion_producer * producer, struct ganglion_kafka_producer_internal * kafka) {
+static void ganglion_kafka_producer_internal_cleanup(struct ganglion_producer * producer, struct ganglion_kafka_producer_internal * kafka) {
   kafka->status = GANGLION_THREAD_CANCELED;
   assert(!pthread_join(kafka->worker, NULL));
 

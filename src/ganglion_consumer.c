@@ -7,38 +7,23 @@
 #include <syslog.h>
 #include <string.h>
 
-#include <rdkafka.h>
-
 #include "ganglion.h"
+#include "_ganglion_internal.h"
 
-struct ganglion_kafka_internal {
-  rd_kafka_t *consumer;
-  rd_kafka_conf_t *config;
-  rd_kafka_topic_conf_t *topic_config;
-  rd_kafka_topic_partition_list_t *topics;
-};
-
-struct ganglion_kafka_internal_message {
-  char * payload;
-  int length;
-  int partition;
-  long offset;
-  struct ganglion_consumer * consumer;
-};
-
-enum ganglion_message_status ganglion_kafka_internal_check_message(rd_kafka_message_t *message) {
+static enum ganglion_message_status ganglion_kafka_internal_check_message(rd_kafka_message_t *message) {
   if (message->err && (message->err == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION || message->err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)) {
     return GANGLION_MSG_ERROR;
   } else if (message->err && message->err == RD_KAFKA_RESP_ERR__PARTITION_EOF) {
     return GANGLION_MSG_EOF;
   } else if (message->err) {
-    printf("librdkafka error code: %d\n", message->err);
+    if (GANGLION_DEBUG)
+      printf("librdkafka error code: %d\n", message->err);
     return GANGLION_MSG_UNKNOWN;
   }
   return GANGLION_MSG_OK;
 }
 
-void * ganglion_worker_thread(void * args) {
+static void * ganglion_worker_thread(void * args) {
   struct ganglion_kafka_internal_message * consumer_message = (struct ganglion_kafka_internal_message *)args;
 
   assert(consumer_message->consumer->callback != NULL);
@@ -54,12 +39,16 @@ void * ganglion_worker_thread(void * args) {
   pthread_exit(NULL);
 }
 
-struct ganglion_kafka_internal * ganglion_kafka_internal_new() {
+static struct ganglion_kafka_internal * ganglion_kafka_internal_new() {
   struct ganglion_kafka_internal * self = (struct ganglion_kafka_internal *)malloc(sizeof(struct ganglion_kafka_internal));
   assert(self != NULL);
 
   self->config = rd_kafka_conf_new();
   self->topic_config = rd_kafka_topic_conf_new();
+
+#ifdef UNIT_TESTING
+  rd_kafka_conf_set_log_cb(self->config, NULL);
+#endif
 
   assert(rd_kafka_topic_conf_set(self->topic_config, "offset.store.method", "broker", NULL, 0) == RD_KAFKA_CONF_OK);
   assert(rd_kafka_topic_conf_set(self->topic_config, "enable.auto.commit", "false", NULL, 0) == RD_KAFKA_CONF_OK);
@@ -68,16 +57,18 @@ struct ganglion_kafka_internal * ganglion_kafka_internal_new() {
   return self;
 }
 
-void ganglion_kafka_internal_cleanup(struct ganglion_kafka_internal * kafka) {
+static void ganglion_kafka_internal_cleanup(struct ganglion_kafka_internal * kafka) {
   rd_kafka_topic_partition_list_destroy(kafka->topics);
   rd_kafka_destroy(kafka->consumer);
+  free(kafka);
+  kafka = NULL;
 }
 
-void ganglion_kafka_internal_set_group(struct ganglion_kafka_internal * self, const char * group) {
+static void ganglion_kafka_internal_set_group(struct ganglion_kafka_internal * self, const char * group) {
   assert(rd_kafka_conf_set(self->config, "group.id", group, NULL, 0) == RD_KAFKA_CONF_OK);
 }
 
-void ganglion_kafka_internal_initialize(struct ganglion_kafka_internal * self, const char *brokers, const char *topic) {
+static void ganglion_kafka_internal_initialize(struct ganglion_kafka_internal * self, const char *brokers, const char *topic) {
   assert(self->consumer = rd_kafka_new(RD_KAFKA_CONSUMER, self->config, NULL, 0));
   rd_kafka_set_log_level(self->consumer, LOG_DEBUG);
   assert(rd_kafka_brokers_add(self->consumer, brokers) != 0);
@@ -86,7 +77,7 @@ void ganglion_kafka_internal_initialize(struct ganglion_kafka_internal * self, c
   rd_kafka_topic_partition_list_add(self->topics, topic, -1);
 }
 
-void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, struct ganglion_consumer *consumer) {
+static void ganglion_kafka_internal_consume(struct ganglion_kafka_internal * self, struct ganglion_consumer *consumer) {
   int i, j;
   if (GANGLION_DEBUG)
     printf("Beginning consumption of topic: %s\n", consumer->topic);

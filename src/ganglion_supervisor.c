@@ -4,18 +4,18 @@
 #include <assert.h>
 #include <math.h>
 
-#include <rdkafka.h>
-
 #include "ganglion.h"
+#include "_ganglion_internal.h"
 
 //Supervisor functions
-void ganglion_consumer_thread_cleanup(void * args) {
+static void ganglion_consumer_thread_cleanup(void * args) {
   struct ganglion_thread_status * status = (struct ganglion_thread_status *)args;
-  printf("Finished consuming topic: %s\n", ((struct ganglion_consumer *)status->context)->topic);
+  if (GANGLION_DEBUG)
+    printf("Finished consuming topic: %s\n", ((struct ganglion_consumer *)status->context)->topic);
   status->status = GANGLION_THREAD_FINISHED;
 }
 
-void * ganglion_consumer_thread(void * args) {
+static void * ganglion_consumer_thread(void * args) {
   struct ganglion_thread_status * status = (struct ganglion_thread_status *)args;
 
   pthread_cleanup_push(ganglion_consumer_thread_cleanup, args);
@@ -27,7 +27,7 @@ void * ganglion_consumer_thread(void * args) {
   pthread_exit(NULL);
 }
 
-void * ganglion_monitor_thread(void * args) {
+static void * ganglion_monitor_thread(void * args) {
   struct ganglion_supervisor * self = (struct ganglion_supervisor *) args;
   pthread_attr_t attr;
 
@@ -40,7 +40,8 @@ void * ganglion_monitor_thread(void * args) {
   while(self->status == GANGLION_THREAD_STARTED) {
     for (i = 0; i < self->consumer_size; i++) {
       if (self->consumer_statuses[i]->status == GANGLION_THREAD_FINISHED) {
-        printf("Monitor found stopped thread: %d, restarting.\n", i);
+        if (GANGLION_DEBUG)
+          printf("Monitor found stopped thread: %d, restarting.\n", i);
         self->consumers[i]->status = GANGLION_THREAD_FINISHED;
         self->consumer_statuses[i]->status = GANGLION_THREAD_STARTED;
         assert(!pthread_create(&self->consumer_threads[i], &attr, ganglion_consumer_thread, (void *)self->consumer_statuses[i]));
@@ -86,7 +87,8 @@ void ganglion_supervisor_stop(struct ganglion_supervisor * self) {
 
   int i;
 
-  printf("Stopping supervisor\n");
+  if (GANGLION_DEBUG)
+    printf("Stopping supervisor\n");
 
   self->status = GANGLION_THREAD_CANCELED; //will stop the monitor thread
   assert(!pthread_join(self->monitor_thread, NULL));
@@ -135,7 +137,8 @@ void ganglion_supervisor_cleanup(struct ganglion_supervisor * supervisor) {
 }
 
 void ganglion_shutdown() {
-  printf("Shutting down libganglion\n");
+  if (GANGLION_DEBUG)
+    printf("Shutting down libganglion\n");
   rd_kafka_wait_destroyed(2000);
   int dangling_threads = rd_kafka_thread_cnt();
   if (dangling_threads > 0) {
