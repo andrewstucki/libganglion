@@ -1,6 +1,10 @@
 #ifndef __GANGLION_H__
 #define __GANGLION_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Structs for consumer
 struct ganglion_consumer {
   int worker_size;
@@ -44,5 +48,9 @@ void ganglion_producer_cleanup(struct ganglion_producer *);
 void ganglion_producer_publish(struct ganglion_producer *, char *, char *, long long);
 
 void ganglion_shutdown();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __GANGLION_H__

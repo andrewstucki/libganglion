@@ -13,21 +13,10 @@ struct ganglion_producer * producer;
 struct ganglion_supervisor * supervisor;
 struct ganglion_consumer * consumer_one;
 struct ganglion_consumer * consumer_two;
+volatile sig_atomic_t shutdown_flag = 0;
 
 void handle_shutdown(int signo) {
-  ganglion_producer_cleanup(producer);
-
-  if (ganglion_supervisor_is_started(supervisor)) {
-    ganglion_supervisor_stop(supervisor);
-
-    ganglion_consumer_cleanup(consumer_two);
-    ganglion_consumer_cleanup(consumer_one);
-    ganglion_supervisor_cleanup(supervisor);
-  }
-
-  ganglion_shutdown();
-
-  exit(0);
+  shutdown_flag = 1;
 }
 
 void handle_message(void * consumer, char * payload, int length, int partition, long offset) {
@@ -67,11 +56,28 @@ int main (int argc, char **argv) {
 
   ganglion_supervisor_start(supervisor);
 
-  while(1) {
+  while(shutdown_flag == 0) {
     fgets(buffer, BUFFER_SIZE, stdin);
     buffer[strlen(buffer)-1] = '\0'; //remove \n
 
+    if (!strcmp(buffer, "quit")) {
+      break;
+    }
+
     ganglion_producer_publish(producer, "stream", buffer, strlen(buffer));
   }
+
+  ganglion_producer_cleanup(producer);
+
+  if (ganglion_supervisor_is_started(supervisor)) {
+    ganglion_supervisor_stop(supervisor);
+
+    ganglion_consumer_cleanup(consumer_two);
+    ganglion_consumer_cleanup(consumer_one);
+    ganglion_supervisor_cleanup(supervisor);
+  }
+
+  ganglion_shutdown();
+
   return 0;
 }

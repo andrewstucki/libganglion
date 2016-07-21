@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Werror -I./build/libs -I./build -I./src
+CFLAGS = -Wall -Werror -I./build/libs -I./build -I./src -fPIC
 LDFLAGS = -lpthread -lz
 PREFIX = /usr/local
 
@@ -38,7 +38,7 @@ TEST_LDFLAGS = -L./build/tests -lcmocka
 TEST_SOURCES = ganglion_consumer_test.c ganglion_producer_test.c ganglion_supervisor_test.c ganglion_test_helpers.c ganglion_test_suite.c
 TEST_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
 
-lib: clean $(BUILD_DIR)/libganglion.a
+lib: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib
 example: clean $(BUILD_DIR)/example
 go-example: $(BUILD_DIR)/go-example
 
@@ -72,7 +72,7 @@ $(BUILD_DIR)/libs/librdkafka.a: deps
 	@cd deps/librdkafka-$(RDKAFKA_VERSION); \
 	./configure $(RDKAFKA_CONFIG_FLAGS) 2>&1 > /dev/null
 	@echo "\033[36mCompiling librdkafka\033[0m"
-	@$(MAKE) -C deps/librdkafka-$(RDKAFKA_VERSION) -s libs CFLAGS=-w 2>&1 > /dev/null
+	@$(MAKE) -C deps/librdkafka-$(RDKAFKA_VERSION) -s libs CFLAGS="-w -fPIC" 2>&1 > /dev/null
 	@cd deps/librdkafka-$(RDKAFKA_VERSION); \
 	cp $(SOURCE_DIR)/rdkafka.h ../../$(BUILD_DIR)/libs; \
 	cp $(SOURCE_DIR)/librdkafka.a ../../$(BUILD_DIR)/libs
@@ -98,11 +98,17 @@ $(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/libs/librdkafka.a $(OBJECTS)
 	$(AR) -r ../libganglion.a *.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS))
 	@echo "\033[36mDone creating $<\033[0m"
 
+$(BUILD_DIR)/libganglion.dylib: $(OBJECTS)
+	@echo "\033[1;4;32mCreating libganglion dynamic library\033[0m"
+	@cd $(BUILD_DIR)/libs; \
+	$(CC) -shared -o ../libganglion.dylib *.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS)) $(LDFLAGS)
+	@echo "\033[36mDone creating $<\033[0m"
+
 $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a examples/basic.c
 	@echo "\033[1;4;32mCompiling basic example\033[0m"
 	@$(CC) -c $(CFLAGS) examples/basic.c -o $(BUILD_DIR)/example.o
 	@$(CC) -O3 -o $(BUILD_DIR)/example $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
-	@strip $(BUILD_DIR)/example
+	#@strip $(BUILD_DIR)/example
 	@echo "\033[36mDone compiling $@\033[0m"
 
 $(BUILD_DIR)/go-example: examples/basic.go
@@ -136,11 +142,12 @@ distclean:
 	rm -rf $(BUILD_DIR) deps test-deps
 
 clean:
-	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/example $(BUILD_DIR)/go-example $(BUILD_DIR)/libs/*.o $(BUILD_DIR)/tests/*.o $(BUILD_DIR)/tests/libganglion*
+	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib $(BUILD_DIR)/example $(BUILD_DIR)/go-example $(BUILD_DIR)/libs/*.o $(BUILD_DIR)/tests/*.o $(BUILD_DIR)/tests/libganglion*
 
-install: $(BUILD_DIR)/libganglion.a $(SOURCE_DIR)/ganglion.h
+install: $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib $(SOURCE_DIR)/ganglion.h
 	install -m 0644 $(SOURCE_DIR)/ganglion.h $(PREFIX)/include
 	install -m 0644 $(BUILD_DIR)/libganglion.a $(PREFIX)/lib
+	install -m 0644 $(BUILD_DIR)/libganglion.dylib $(PREFIX)/lib
 	install -m 0644 $(SOURCE_DIR)/libganglion.pc $(PREFIX)/lib/pkgconfig/
 
 uninstall:

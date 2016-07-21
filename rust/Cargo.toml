@@ -1,0 +1,7 @@
+[package]
+name = "ganglion"
+version = "0.1.0"
+authors = ["Andrew Stucki <andrew.stucki@govdelivery.com>"]
+
+[dependencies]
+libc = "0.2.14"

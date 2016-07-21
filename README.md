@@ -27,3 +27,7 @@ The go wrappers assume you already have a built library available in your system
 Once you have the library installed run `go get github.com/andrewstucki/libganglion/go` and you should have working go
 bindings. To see the bindings in action run `go build examples/basic.go` after installing the bindings. As a shortcut to
 all of this run `make go-example` and you should have a build binary in `build/go-example`.
+
+##Rust Wrappers
+
+Assuming you're using cargo, after installing libganglion, you can build the rust bindings with `cd rust && cargo build`. An example of how to use the bindings is found in `basic.rs`.

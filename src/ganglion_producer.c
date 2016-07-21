@@ -55,7 +55,7 @@ static struct ganglion_producer_internal * ganglion_producer_internal_new(struct
   if (self->report_callback != NULL) {
     assert(rd_kafka_topic_conf_set(self->topic_config, "produce.offset.report", "true", NULL, 0) == RD_KAFKA_CONF_OK);
     rd_kafka_conf_set_dr_msg_cb(self->config, report_callback_wrapper);
-    rd_kafka_conf_set_opaque(self->config, self->context);
+    rd_kafka_conf_set_opaque(self->config, producer);
   }
 
   if (producer->queue_length > 0) {
