@@ -51,6 +51,110 @@ void ganglion_shutdown();
 
 #ifdef __cplusplus
 }
+
+#include <string>
+#include <vector>
+#include <iostream>
+
+class GanglionConsumer {
+  friend class GanglionSupervisor;
+  ganglion_consumer * internal;
+  char *c_brokers;
+  char *c_topic;
+  char *c_group;
+public:
+  GanglionConsumer(std::string brokers, int workers, std::string topic, std::string group, void (* callback)(void *, char *, int, int, long)) {
+    c_brokers = new char[brokers.length() + 1];
+    std::strcpy(c_brokers, brokers.c_str());
+
+    c_topic = new char[topic.length() + 1];
+    std::strcpy(c_topic, topic.c_str());
+
+    c_group = new char[group.length() + 1];
+    std::strcpy(c_group, group.c_str());
+
+    internal = ganglion_consumer_new(c_brokers, workers, c_topic, c_group, NULL, callback);
+  }
+
+  ~GanglionConsumer(void) {
+    ganglion_consumer_cleanup(internal);
+    delete [] c_brokers;
+    delete [] c_topic;
+    delete [] c_group;
+  }
+
+  void start(void) {
+    ganglion_consumer_start(internal);
+  }
+
+  void stop(void) {
+    ganglion_consumer_stop(internal);
+  }
+
+  void wait(void) {
+    ganglion_consumer_wait(internal);
+  }
+};
+
+class GanglionSupervisor {
+  ganglion_supervisor * internal;
+public:
+
+  GanglionSupervisor(void) {
+    internal = ganglion_supervisor_new();
+  }
+
+  ~GanglionSupervisor(void) {
+    ganglion_supervisor_cleanup(internal);
+  }
+
+  void start(void) {
+    ganglion_supervisor_start(internal);
+  }
+
+  void stop(void) {
+    ganglion_supervisor_stop(internal);
+  }
+
+  int add(GanglionConsumer *consumer) {
+    return ganglion_supervisor_register(internal, consumer->internal);
+  }
+
+  bool is_started(void) {
+    return ganglion_supervisor_is_started(internal);
+  }
+};
+
+class GanglionProducer {
+  ganglion_producer * internal;
+  char *c_brokers;
+  char *c_id;
+  char *c_compression;
+public:
+  GanglionProducer(std::string brokers, std::string id, std::string compression, int queue_length, int queue_flush_rate, void (*report_callback)(void *, const char *, char *, int)) {
+    c_brokers = new char[brokers.length() + 1];
+    std::strcpy(c_brokers, brokers.c_str());
+
+    c_id = new char[id.length() + 1];
+    std::strcpy(c_id, id.c_str());
+
+    c_compression = new char[compression.length() + 1];
+    std::strcpy(c_compression, compression.c_str());
+
+    internal = ganglion_producer_new(c_brokers, c_id, c_compression, queue_length, queue_flush_rate, NULL, report_callback);
+  }
+
+  ~GanglionProducer(void) {
+    ganglion_producer_cleanup(internal);
+    delete [] c_brokers;
+    delete [] c_id;
+    delete [] c_compression;
+  }
+
+  void publish(std::string topic, std::vector<char> message) {
+    ganglion_producer_publish(internal, (char *)topic.c_str(), (char *)(&message[0]), message.size());
+  }
+};
 #endif
 
 #endif // __GANGLION_H__

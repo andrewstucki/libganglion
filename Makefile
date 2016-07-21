@@ -1,4 +1,5 @@
 CC = gcc
+CXX = g++
 CFLAGS = -Wall -Werror -I./build/libs -I./build -I./src -fPIC
 LDFLAGS = -lpthread -lz
 PREFIX = /usr/local
@@ -42,6 +43,9 @@ lib: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib
 example: clean $(BUILD_DIR)/example
 go-example: $(BUILD_DIR)/go-example
 rust-example: $(BUILD_DIR)/rust-example
+cpp-example: $(BUILD_DIR)/cpp-example
+
+examples: example go-example rust-example cpp-example
 
 tests: CFLAGS += -DUNIT_TESTING=1
 tests: clean $(BUILD_DIR)/tests/libganglion_test_suite
@@ -108,8 +112,8 @@ $(BUILD_DIR)/libganglion.dylib: $(OBJECTS)
 $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a src/examples/basic.c
 	@echo "\033[1;4;32mCompiling basic example\033[0m"
 	@$(CC) -c $(CFLAGS) src/examples/basic.c -o $(BUILD_DIR)/example.o
-	@$(CC) -O3 -o $(BUILD_DIR)/example $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
-	@strip $(BUILD_DIR)/example
+	@$(CC) -O3 -o $@ $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
+	@strip $@
 	@echo "\033[36mDone compiling $@\033[0m"
 
 $(BUILD_DIR)/go-example: go/examples/basic.go
@@ -123,6 +127,13 @@ $(BUILD_DIR)/rust-example: $(BUILD_DIR)/libganglion.dylib rust/examples/basic.rs
 	@cd rust; \
 	LIBRARY_PATH=../$(BUILD_DIR) cargo build --example basic
 	@cp rust/target/debug/examples/basic $@
+	@echo "\033[36mDone compiling $@\033[0m"
+
+$(BUILD_DIR)/cpp-example: $(BUILD_DIR)/libganglion.a src/examples/basic.cpp
+	@echo "\033[1;4;32mCompiling basic c++ example\033[0m"
+	@$(CXX) -c $(CFLAGS) src/examples/basic.cpp -o $(BUILD_DIR)/cpp-example.o
+	@$(CXX) -O3 -o $@ $(BUILD_DIR)/cpp-example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
+	@strip $@
 	@echo "\033[36mDone compiling $@\033[0m"
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
