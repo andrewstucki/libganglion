@@ -118,11 +118,11 @@ $(BUILD_DIR)/go-example: go/examples/basic.go
 	@go build -o $@ go/examples/basic.go
 	@echo "\033[36mDone compiling $@\033[0m"
 
-$(BUILD_DIR)/rust-example: rust/examples/basic.rs
+$(BUILD_DIR)/rust-example: $(BUILD_DIR)/libganglion.dylib rust/examples/basic.rs
 	@echo "\033[1;4;32mCompiling basic rust example\033[0m"
 	@cd rust; \
-	LIBRARY_PATH=/usr/local/lib cargo build --example basic
-	@cp rust/target/debug/examples/test $@
+	LIBRARY_PATH=../$(BUILD_DIR) cargo build --example basic
+	@cp rust/target/debug/examples/basic $@
 	@echo "\033[36mDone compiling $@\033[0m"
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
