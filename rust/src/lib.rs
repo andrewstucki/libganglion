@@ -101,6 +101,8 @@ impl GanglionConsumer {
                 }
             }
             quit_sender.send(()).unwrap();
+            receiver.recv().unwrap(); // one more to avoid the segfaulting consumer
+            quit_sender.send(()).unwrap();
         });
 
         let consumer = signaled.recv().unwrap();
@@ -115,6 +117,8 @@ impl Drop for GanglionConsumer {
             Ok(_) => {
                 self.3.recv().unwrap();
                 unsafe { ganglion_consumer_cleanup(self.0) };
+                self.2.send(ConsumerHandlerMessage::Close).unwrap();
+                self.3.recv().unwrap();
             }
         }
     }
