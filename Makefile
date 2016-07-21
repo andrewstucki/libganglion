@@ -11,7 +11,7 @@ TESTS_DIR = tests
 SOURCES = ganglion_consumer.c ganglion_producer.c ganglion_supervisor.c
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
 
-RDKAFKA_VERSION = 0.9.0.99
+RDKAFKA_VERSION = 0.9.1
 
 ifdef USE_SASL
 	SASL2_LIBS = $(shell pkg-config --libs sasl2)
@@ -158,7 +158,7 @@ run-tests: tests
 	@CMOCKA_TEST_ABORT='1' ./$(BUILD_DIR)/tests/libganglion_test_suite #needed for threading
 
 distclean:
-	rm -rf $(BUILD_DIR) deps test-deps
+	rm -rf $(BUILD_DIR) deps test-deps rust/target rust/Cargo.lock
 
 clean:
 	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib $(BUILD_DIR)/example $(BUILD_DIR)/go-example $(BUILD_DIR)/libs/*.o $(BUILD_DIR)/tests/*.o $(BUILD_DIR)/tests/libganglion*
