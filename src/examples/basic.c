@@ -4,7 +4,7 @@
 #include <signal.h>
 #include <string.h>
 
-#include "../src/ganglion.h"
+#include "../ganglion.h"
 
 #define BUFFER_SIZE 1024
 

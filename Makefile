@@ -41,6 +41,7 @@ TEST_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
 lib: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib
 example: clean $(BUILD_DIR)/example
 go-example: $(BUILD_DIR)/go-example
+rust-example: $(BUILD_DIR)/rust-example
 
 tests: CFLAGS += -DUNIT_TESTING=1
 tests: clean $(BUILD_DIR)/tests/libganglion_test_suite
@@ -104,17 +105,24 @@ $(BUILD_DIR)/libganglion.dylib: $(OBJECTS)
 	$(CC) -shared -o ../libganglion.dylib *.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS)) $(LDFLAGS)
 	@echo "\033[36mDone creating $<\033[0m"
 
-$(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a examples/basic.c
+$(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a src/examples/basic.c
 	@echo "\033[1;4;32mCompiling basic example\033[0m"
-	@$(CC) -c $(CFLAGS) examples/basic.c -o $(BUILD_DIR)/example.o
+	@$(CC) -c $(CFLAGS) src/examples/basic.c -o $(BUILD_DIR)/example.o
 	@$(CC) -O3 -o $(BUILD_DIR)/example $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
-	#@strip $(BUILD_DIR)/example
+	@strip $(BUILD_DIR)/example
 	@echo "\033[36mDone compiling $@\033[0m"
 
-$(BUILD_DIR)/go-example: examples/basic.go
+$(BUILD_DIR)/go-example: go/examples/basic.go
 	@echo "\033[1;4;32mCompiling basic go example\033[0m"
 	@go get github.com/andrewstucki/libganglion/go
-	@go build -o $@ examples/basic.go
+	@go build -o $@ go/examples/basic.go
+	@echo "\033[36mDone compiling $@\033[0m"
+
+$(BUILD_DIR)/rust-example: rust/examples/basic.rs
+	@echo "\033[1;4;32mCompiling basic rust example\033[0m"
+	@cd rust; \
+	LIBRARY_PATH=/usr/local/lib cargo build --example basic
+	@cp rust/target/debug/examples/test $@
 	@echo "\033[36mDone compiling $@\033[0m"
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
