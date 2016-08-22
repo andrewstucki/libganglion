@@ -1,6 +1,6 @@
 CC = gcc
 CXX = g++
-CFLAGS = -Wall -Werror -I./build/libs -I./build -I./src
+CFLAGS = -Wall -Werror -I./build/libs -I./build -I./src -fPIC
 LDFLAGS = -lpthread -lz -lc++
 PREFIX = /usr/local
 
@@ -14,12 +14,23 @@ OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
 #currently actually build master due to rd_kafka_destroy deadlock
 RDKAFKA_VERSION = 0.9.1
 LZ4_VERSION = 131
+
+OPENSSL_VERSION = 1_0_2h
+
 SERDES_VERSION = 3.0.0
 CURL_VERSION = 7.50.1
 AVROC_VERSION = 1.8.1
 JANSSON_VERSION = 2.7
 SNAPPY_VERSION = 1.1.3
 LZMA_VERSION = 5.2.2
+
+PLATFORM := $(shell uname -s)
+ifeq ($(PLATFORM),Linux)
+		OPENSSL_CONFIGURE = "./config no-shared"
+endif
+ifeq ($(PLATFORM),Darwin)
+		OPENSSL_CONFIGURE = "./Configure darwin64-x86_64-cc no-shared"
+endif
 
 ifdef USE_SASL
 	SASL2_LIBS = $(shell pkg-config --libs sasl2)
@@ -31,7 +42,7 @@ else
 	RDKAFKA_SASL = "without"
 endif
 
-ifdef USE_SSL
+ifndef NO_SSL
 	OPENSSL_LIBS = $(shell pkg-config --libs openssl)
 	LDFLAGS += $(OPENSSL_LIBS)
 	RDKAFKA_CONFIG_FLAGS += --enable-ssl
@@ -111,6 +122,13 @@ deps:
 	mkdir liblz4-$(LZ4_VERSION); \
 	tar xzf liblz4-$(LZ4_VERSION).tar.gz -C liblz4-$(LZ4_VERSION) --strip-components 1
 	@echo "\033[36mDone extracting liblz4\033[0m"
+	@echo "\033[36mDownloading openssl version: ${OPENSSL_VERSION}\033[0m"
+	@curl -L https://github.com/openssl/openssl/archive/OpenSSL_$(OPENSSL_VERSION).tar.gz -o deps/openssl-$(OPENSSL_VERSION).tar.gz
+	@echo "\033[36mExtracting openssl\033[0m"
+	@cd deps; \
+	mkdir openssl-$(OPENSSL_VERSION); \
+	tar xzf openssl-$(OPENSSL_VERSION).tar.gz -C openssl-$(OPENSSL_VERSION) --strip-components 1
+	@echo "\033[36mDone extracting openssl\033[0m"
 
 test-deps:
 	@echo "\033[1;4;32mDownloading dependant test libraries\033[0m"
@@ -198,12 +216,12 @@ $(BUILD_DIR)/libs/librdkafka.a: $(BUILD_DIR)/libs/liblz4.a deps
 	cp $(SOURCE_DIR)/librdkafka.a ../../$(BUILD_DIR)/libs
 	@echo "\033[36mDone compiling librdkafka\033[0m"
 
-$(BUILD_DIR)/libs/libcurl.a: deps
+$(BUILD_DIR)/libs/libcurl.a: $(BUILD_DIR)/libs/libssl.a deps
 	@echo "\033[1;4;32mBuilding libcurl ${CURL_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
 	@echo "\033[36mConfiguring libcurl\033[0m"
 	@cd deps/libcurl-$(CURL_VERSION); \
-	./configure --without-ssl --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-proxy --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-manual 2>&1 > /dev/null
+	./configure CFLAGS="-I../../$(BUILD_DIR)/libs" --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-proxy --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-manual 2>&1 > /dev/null
 	@echo "\033[36mCompiling libcurl\033[0m"
 	@$(MAKE) -j4 -C deps/libcurl-$(CURL_VERSION) -s 2>&1 > /dev/null
 	@mkdir -p $(BUILD_DIR)/libs/curl
@@ -217,6 +235,28 @@ $(BUILD_DIR)/libs/liblz4.a: deps
 	@$(MAKE) lib -j4 -C deps/liblz4-$(LZ4_VERSION) -s 2>&1 > /dev/null
 	@cp deps/liblz4-$(LZ4_VERSION)/lib/liblz4.a $(BUILD_DIR)/libs
 	@cp deps/liblz4-$(LZ4_VERSION)/lib/lz4.h $(BUILD_DIR)/libs
+
+$(BUILD_DIR)/libs/libssl.a: deps
+	@echo "\033[1;4;32mBuilding openssl ${OPENSSL_VERSION}\033[0m"
+	@mkdir -p $(BUILD_DIR)/libs
+	@echo "\033[36mConfiguring openssl\033[0m"
+	@cd deps/openssl-$(OPENSSL_VERSION); \
+	sh -c $(OPENSSL_CONFIGURE) 2>&1 > /dev/null
+	@echo "\033[36mCompiling openssl\033[0m"
+	@$(MAKE) -j4 -C deps/openssl-$(OPENSSL_VERSION) -s 2>&1 > /dev/null
+	@cp deps/openssl-$(OPENSSL_VERSION)/*.a $(BUILD_DIR)/libs
+	@cp -LR deps/openssl-$(OPENSSL_VERSION)/include/openssl $(BUILD_DIR)/libs
+
+$(BUILD_DIR)/libs/libsasl2.a: deps
+	@echo "\033[1;4;32mBuilding sasl ${OPENSSL_VERSION}\033[0m"
+	@mkdir -p $(BUILD_DIR)/libs
+	@echo "\033[36mConfiguring sasl\033[0m"
+	@cd deps/sasl-$(OPENSSL_VERSION); \
+	./config no-shared 2>&1 > /dev/null
+	@echo "\033[36mCompiling sasl\033[0m"
+	@$(MAKE) -j4 -C deps/sasl-$(OPENSSL_VERSION) -s 2>&1 > /dev/null
+	@cp deps/sasl-$(OPENSSL_VERSION)/*.a $(BUILD_DIR)/libs
+	@cp -LR deps/sasl-$(OPENSSL_VERSION)/include/sasl $(BUILD_DIR)/libs
 
 $(BUILD_DIR)/tests/libcmocka.dylib: test-deps
 	@echo "\033[1;4;32mBuilding libcmocka ${CMOCKA_VERSION}\033[0m"
@@ -242,6 +282,8 @@ $(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/lib
 	mkdir -p liblzma && cd liblzma && $(AR) -x ../liblzma.a && cd ..; \
 	mkdir -p libsnappy && cd libsnappy && $(AR) -x ../libsnappy.a && cd ..; \
 	mkdir -p liblz4 && cd liblz4 && $(AR) -x ../liblz4.a && cd ..; \
+	mkdir -p libssl && cd libssl && $(AR) -x ../libssl.a && cd ..; \
+	mkdir -p libcrypto && cd libcrypto && $(AR) -x ../libcrypto.a && cd ..; \
 	$(AR) -r ../libganglion.a lib*/*.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS))
 	@echo "\033[36mDone creating libganglion.a\033[0m"
 
