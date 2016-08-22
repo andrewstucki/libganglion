@@ -1,6 +1,6 @@
 CC = gcc
 CXX = g++
-CFLAGS = -Wall -Werror -I./build/libs -I./build -I./src -fPIC
+CFLAGS = -Wall -Werror -I./build/libs -I./build -I./src
 LDFLAGS = -lpthread -lz -lc++
 PREFIX = /usr/local
 
@@ -11,7 +11,9 @@ TESTS_DIR = tests
 SOURCES = ganglion_consumer.c ganglion_producer.c ganglion_supervisor.c
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
 
+#currently actually build master due to rd_kafka_destroy deadlock
 RDKAFKA_VERSION = 0.9.1
+LZ4_VERSION = 131
 SERDES_VERSION = 3.0.0
 CURL_VERSION = 7.50.1
 AVROC_VERSION = 1.8.1
@@ -54,17 +56,13 @@ cpp-example: $(BUILD_DIR)/cpp-example
 examples: example go-example rust-example cpp-example
 
 tests: CFLAGS += -DUNIT_TESTING=1
-tests: clean $(BUILD_DIR)/tests/libganglion_test_suite
+tests: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/tests/libganglion_test_suite
 
 deps:
 	@echo "\033[1;4;32mDownloading dependant libraries\033[0m"
 	@mkdir -p deps
 	@echo "\033[36mDownloading librdkafka version: ${RDKAFKA_VERSION}\033[0m"
-	@curl -L https://github.com/edenhill/librdkafka/archive/$(RDKAFKA_VERSION).tar.gz -o deps/librdkafka-$(RDKAFKA_VERSION).tar.gz
-	@echo "\033[36mExtracting librdkafka\033[0m"
-	@cd deps; \
-	tar xzf librdkafka-$(RDKAFKA_VERSION).tar.gz
-	@echo "\033[36mDone extracting librdkafka\033[0m"
+	@git clone --depth 1 https://github.com/edenhill/librdkafka.git deps/librdkafka-$(RDKAFKA_VERSION)
 	@echo "\033[36mDownloading libserdes version: ${SERDES_VERSION}\033[0m"
 	@curl -L https://github.com/confluentinc/libserdes/archive/v$(SERDES_VERSION).tar.gz -o deps/libserdes-$(SERDES_VERSION).tar.gz
 	@echo "\033[36mExtracting libserdes\033[0m"
@@ -106,6 +104,13 @@ deps:
 	mkdir libsnappy-$(SNAPPY_VERSION); \
 	tar xzf libsnappy-$(SNAPPY_VERSION).tar.gz -C libsnappy-$(SNAPPY_VERSION) --strip-components 1
 	@echo "\033[36mDone extracting libsnappy\033[0m"
+	@echo "\033[36mDownloading liblz4 version: ${LZ4_VERSION}\033[0m"
+	@curl -L https://github.com/Cyan4973/lz4/archive/r$(LZ4_VERSION).tar.gz -o deps/liblz4-$(LZ4_VERSION).tar.gz
+	@echo "\033[36mExtracting liblz4\033[0m"
+	@cd deps; \
+	mkdir liblz4-$(LZ4_VERSION); \
+	tar xzf liblz4-$(LZ4_VERSION).tar.gz -C liblz4-$(LZ4_VERSION) --strip-components 1
+	@echo "\033[36mDone extracting liblz4\033[0m"
 
 test-deps:
 	@echo "\033[1;4;32mDownloading dependant test libraries\033[0m"
@@ -124,7 +129,7 @@ $(BUILD_DIR)/libs/liblzma.a: deps
 	@cd deps/liblzma-$(LZMA_VERSION); \
 	./configure 2>&1 > /dev/null
 	@echo "\033[36mCompiling liblzma\033[0m"
-	@$(MAKE) -C deps/liblzma-$(LZMA_VERSION) CFLAGS="-w -fPIC" 2>&1 > /dev/null
+	@$(MAKE) -j4 -C deps/liblzma-$(LZMA_VERSION) CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@mkdir -p $(BUILD_DIR)/libs/lzma
 	@cp deps/liblzma-$(LZMA_VERSION)/src/liblzma/.libs/liblzma.a $(BUILD_DIR)/libs
 	@cp deps/liblzma-$(LZMA_VERSION)/src/liblzma/api/lzma.h $(BUILD_DIR)/libs; \
@@ -137,7 +142,7 @@ $(BUILD_DIR)/libs/libsnappy.a: deps
 	@cd deps/libsnappy-$(SNAPPY_VERSION); \
 	./configure 2>&1 > /dev/null
 	@echo "\033[36mCompiling libsnappy\033[0m"
-	@$(MAKE) -C deps/libsnappy-$(SNAPPY_VERSION) CFLAGS="-w -fPIC" 2>&1 > /dev/null
+	@$(MAKE) -j4 -C deps/libsnappy-$(SNAPPY_VERSION) CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/libsnappy-$(SNAPPY_VERSION)/.libs/libsnappy.a $(BUILD_DIR)/libs
 	@cp deps/libsnappy-$(SNAPPY_VERSION)/snappy-c.h $(BUILD_DIR)/libs
 
@@ -150,7 +155,7 @@ $(BUILD_DIR)/libs/libjansson.a: deps
 	cd build; \
 	cmake .. -Wno-dev 2>&1 > /dev/null
 	@echo "\033[36mCompiling libjansson\033[0m"
-	@$(MAKE) -C deps/libjansson-$(JANSSON_VERSION)/build CFLAGS="-w -fPIC" 2>&1 > /dev/null
+	@$(MAKE) -j4 -C deps/libjansson-$(JANSSON_VERSION)/build CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/libjansson-$(JANSSON_VERSION)/build/lib/libjansson.a $(BUILD_DIR)/libs
 	@cp deps/libjansson-$(JANSSON_VERSION)/build/include/*.h $(BUILD_DIR)/libs
 
@@ -163,7 +168,7 @@ $(BUILD_DIR)/libs/libavro.a: $(BUILD_DIR)/libs/liblzma.a $(BUILD_DIR)/libs/libsn
 	cd build; \
 	cmake .. -Wno-dev 2>&1 > /dev/null
 	@echo "\033[36mCompiling libavro\033[0m"
-	@$(MAKE) -C deps/libavro-$(AVROC_VERSION)/lang/c/build CFLAGS="-w -fPIC" 2>&1 > /dev/null
+	@$(MAKE) -j4 -C deps/libavro-$(AVROC_VERSION)/lang/c/build CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/libavro-$(AVROC_VERSION)/lang/c/build/src/libavro.a $(BUILD_DIR)/libs
 	@cp deps/libavro-$(AVROC_VERSION)/lang/c/src/avro.h $(BUILD_DIR)/libs; \
 	 cp -r deps/libavro-$(AVROC_VERSION)/lang/c/src/avro $(BUILD_DIR)/libs
@@ -175,19 +180,19 @@ $(BUILD_DIR)/libs/libserdes.a: $(BUILD_DIR)/libs/libavro.a $(BUILD_DIR)/libs/lib
 	@cd deps/libserdes-$(SERDES_VERSION); \
 	CFLAGS="-I../../build/libs -L../../build/libs" ./configure 2>&1 > /dev/null
 	@echo "\033[36mCompiling libserdes\033[0m"
-	@$(MAKE) libserdes.a -C deps/libserdes-$(SERDES_VERSION)/src CFLAGS="-w -fPIC -I`pwd`/$(BUILD_DIR)/libs" 2>&1 > /dev/null
+	@$(MAKE) -j4 libserdes.a -C deps/libserdes-$(SERDES_VERSION)/src CFLAGS="-w -fPIC -I`pwd`/$(BUILD_DIR)/libs" -s 2>&1 > /dev/null
 	@cp deps/libserdes-$(SERDES_VERSION)/src/libserdes.a $(BUILD_DIR)/libs
 	@mkdir -p $(BUILD_DIR)/libs/serdes
 	@cp deps/libserdes-$(SERDES_VERSION)/src/serdes*.h $(BUILD_DIR)/libs/serdes
 
-$(BUILD_DIR)/libs/librdkafka.a: deps
+$(BUILD_DIR)/libs/librdkafka.a: $(BUILD_DIR)/libs/liblz4.a deps
 	@echo "\033[1;4;32mBuilding librdkafka ${RDKAFKA_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
 	@echo "\033[36mConfiguring librdkafka ${RDKAFKA_SSL} ssl support and ${RDKAFKA_SASL} sasl support\033[0m"
 	@cd deps/librdkafka-$(RDKAFKA_VERSION); \
 	./configure $(RDKAFKA_CONFIG_FLAGS) 2>&1 > /dev/null
 	@echo "\033[36mCompiling librdkafka\033[0m"
-	@$(MAKE) -C deps/librdkafka-$(RDKAFKA_VERSION) -s libs CFLAGS="-w -fPIC" 2>&1 > /dev/null
+	@$(MAKE) librdkafka.a -j4 -C deps/librdkafka-$(RDKAFKA_VERSION)/src -s 2>&1 > /dev/null
 	@cd deps/librdkafka-$(RDKAFKA_VERSION); \
 	cp $(SOURCE_DIR)/rdkafka.h ../../$(BUILD_DIR)/libs; \
 	cp $(SOURCE_DIR)/librdkafka.a ../../$(BUILD_DIR)/libs
@@ -200,10 +205,18 @@ $(BUILD_DIR)/libs/libcurl.a: deps
 	@cd deps/libcurl-$(CURL_VERSION); \
 	./configure --without-ssl --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-proxy --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-manual 2>&1 > /dev/null
 	@echo "\033[36mCompiling libcurl\033[0m"
-	@$(MAKE) -C deps/libcurl-$(CURL_VERSION) 2>&1 > /dev/null
+	@$(MAKE) -j4 -C deps/libcurl-$(CURL_VERSION) -s 2>&1 > /dev/null
 	@mkdir -p $(BUILD_DIR)/libs/curl
 	@cp deps/libcurl-$(CURL_VERSION)/lib/.libs/libcurl.a $(BUILD_DIR)/libs
 	@cp deps/libcurl-$(CURL_VERSION)/include/curl/*.h $(BUILD_DIR)/libs/curl
+
+$(BUILD_DIR)/libs/liblz4.a: deps
+	@echo "\033[1;4;32mBuilding liblz4 ${LZ4_VERSION}\033[0m"
+	@mkdir -p $(BUILD_DIR)/libs
+	@echo "\033[36mCompiling liblz4\033[0m"
+	@$(MAKE) lib -j4 -C deps/liblz4-$(LZ4_VERSION) -s 2>&1 > /dev/null
+	@cp deps/liblz4-$(LZ4_VERSION)/lib/liblz4.a $(BUILD_DIR)/libs
+	@cp deps/liblz4-$(LZ4_VERSION)/lib/lz4.h $(BUILD_DIR)/libs
 
 $(BUILD_DIR)/tests/libcmocka.dylib: test-deps
 	@echo "\033[1;4;32mBuilding libcmocka ${CMOCKA_VERSION}\033[0m"
@@ -221,11 +234,15 @@ $(BUILD_DIR)/tests/libcmocka.dylib: test-deps
 $(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a $(OBJECTS)
 	@echo "\033[1;4;32mCreating libganglion static library\033[0m"
 	@cd $(BUILD_DIR)/libs; \
-	$(AR) -x librdkafka.a; \
-	$(AR) -x libjansson.a; \
-	$(AR) -x libserdes.a; \
-	$(AR) -x libavro.a; \
-	$(AR) -r ../libganglion.a *.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS))
+	mkdir -p librdkafka && cd librdkafka && $(AR) -x ../librdkafka.a && cd ..; \
+	mkdir -p libserdes && cd libserdes && $(AR) -x ../libserdes.a && cd ..; \
+	mkdir -p libcurl && cd libcurl && $(AR) -x ../libcurl.a && cd ..; \
+	mkdir -p libavro && cd libavro && $(AR) -x ../libavro.a && cd ..; \
+	mkdir -p libjansson && cd libjansson && $(AR) -x ../libjansson.a && cd ..; \
+	mkdir -p liblzma && cd liblzma && $(AR) -x ../liblzma.a && cd ..; \
+	mkdir -p libsnappy && cd libsnappy && $(AR) -x ../libsnappy.a && cd ..; \
+	mkdir -p liblz4 && cd liblz4 && $(AR) -x ../liblz4.a && cd ..; \
+	$(AR) -r ../libganglion.a lib*/*.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS))
 	@echo "\033[36mDone creating libganglion.a\033[0m"
 
 $(BUILD_DIR)/libganglion.dylib: $(OBJECTS)
