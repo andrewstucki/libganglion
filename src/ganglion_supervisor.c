@@ -29,9 +29,9 @@ static void * ganglion_consumer_thread(void * args) {
 
 static void * ganglion_monitor_thread(void * args) {
   struct ganglion_supervisor * self = (struct ganglion_supervisor *) args;
-  assert(self);
+  assert(self != NULL);
   struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   pthread_attr_t attr;
 
@@ -60,9 +60,9 @@ static void * ganglion_monitor_thread(void * args) {
 }
 
 void ganglion_supervisor_start(struct ganglion_supervisor * self) {
-  assert(self);
+  assert(self != NULL);
   struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   assert(internal->status != GANGLION_THREAD_STARTED);
 
@@ -91,9 +91,9 @@ void ganglion_supervisor_start(struct ganglion_supervisor * self) {
 }
 
 void ganglion_supervisor_stop(struct ganglion_supervisor * self) {
-  assert(self);
+  assert(self != NULL);
   struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   assert(internal->status == GANGLION_THREAD_STARTED);
 
@@ -115,9 +115,9 @@ void ganglion_supervisor_stop(struct ganglion_supervisor * self) {
 }
 
 int ganglion_supervisor_register(struct ganglion_supervisor * self, struct ganglion_consumer * consumer) {
-  assert(self);
+  assert(self != NULL);
   struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   if (internal->consumers == NULL) {
     assert((internal->consumers = (struct ganglion_consumer **)malloc(sizeof(struct ganglion_consumer *) * ++internal->consumer_size)) != NULL);
@@ -129,9 +129,9 @@ int ganglion_supervisor_register(struct ganglion_supervisor * self, struct gangl
 }
 
 int ganglion_supervisor_is_started(struct ganglion_supervisor * self) {
-  assert(self);
+  assert(self != NULL);
   struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   return internal->status == GANGLION_THREAD_STARTED;
 }
@@ -153,9 +153,9 @@ struct ganglion_supervisor * ganglion_supervisor_new() {
 }
 
 void ganglion_supervisor_cleanup(struct ganglion_supervisor * supervisor) {
-  assert(supervisor);
+  assert(supervisor != NULL);
   struct ganglion_supervisor_internal * internal = (struct ganglion_supervisor_internal *)supervisor->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   assert(internal->status != GANGLION_THREAD_STARTED);
 

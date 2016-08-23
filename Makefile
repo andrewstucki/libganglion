@@ -1,7 +1,7 @@
 CC = gcc
 CXX = g++
 CFLAGS = -Wall -Werror -I./build/libs -I./build -I./src -fPIC
-LDFLAGS = -lpthread -lz -lc++
+LDFLAGS = -lpthread -lz
 PREFIX = /usr/local
 
 SOURCE_DIR = src
@@ -26,10 +26,20 @@ LZMA_VERSION = 5.2.2
 
 PLATFORM := $(shell uname -s)
 ifeq ($(PLATFORM),Linux)
+		LDFLAGS += -lstdc++ -ldl -lrt
+		DYNAMIC_SUFFIX = "so"
+		SNAPPY_SYMBOL_CONFLICT_RESOLVE = "objcopy --redefine-sym snappy_compress=rd_snappy_compress --redefine-sym snappy_uncompress=rd_snappy_uncompress --redefine-sym snappy_max_compressed_length=rd_snappy_max_compressed_length --redefine-sym snappy_uncompressed_length=rd_snappy_uncompressed_length $(BUILD_DIR)/libs/librdkafka/snappy.o"
+		CREATE_ARCHIVE_COMMAND = "ld -r -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,%,$(OBJECTS)) && objcopy -w -G \"ganglion*\" ganglion.o"
 		OPENSSL_CONFIGURE = "./config no-shared"
+		TEST_RUNNER = "CMOCKA_TEST_ABORT='1' LD_PRELOAD=$(BUILD_DIR)/tests/libcmocka.so $(BUILD_DIR)/tests/libganglion_test_suite"
 endif
 ifeq ($(PLATFORM),Darwin)
+		LDFLAGS += -lc++
+		DYNAMIC_SUFFIX = "dylib"
+		SNAPPY_SYMBOL_CONFLICT_RESOLVE = "ld -r -o $(BUILD_DIR)/libs/librdkafka/rd_kafka_snappy.o $(BUILD_DIR)/libs/librdkafka/snappy.o -alias _snappy_compress _rd_snappy_compress -alias _snappy_uncompress _rd_snappy_uncompress -alias _snappy_max_compressed_length _rd_snappy_max_compressed_length -alias _snappy_uncompressed_length _rd_snappy_uncompressed_length -unexported_symbol _snappy_compress -unexported_symbol _snappy_uncompress -unexported_symbol _snappy_max_compressed_length -unexported_symbol _snappy_uncompressed_length && rm $(BUILD_DIR)/libs/librdkafka/snappy.o"
+		CREATE_ARCHIVE_COMMAND = "ld -r -x -exported_symbol "_ganglion*" -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,%,$(OBJECTS))"
 		OPENSSL_CONFIGURE = "./Configure darwin64-x86_64-cc no-shared"
+		TEST_RUNNER = "CMOCKA_TEST_ABORT='1' $(BUILD_DIR)/tests/libganglion_test_suite"
 endif
 
 ifdef USE_SASL
@@ -56,7 +66,7 @@ TEST_LDFLAGS = -L./build/tests -lcmocka
 TEST_SOURCES = ganglion_consumer_test.c ganglion_producer_test.c ganglion_supervisor_test.c ganglion_test_helpers.c ganglion_test_suite.c
 TEST_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
 
-lib: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib
+lib: clean $(BUILD_DIR)/libganglion.a
 example: clean $(BUILD_DIR)/example
 go-example: $(BUILD_DIR)/go-example
 rust-example: $(BUILD_DIR)/rust-example
@@ -106,13 +116,6 @@ deps:
 	mkdir liblzma-$(LZMA_VERSION); \
 	tar xzf liblzma-$(LZMA_VERSION).tar.gz -C liblzma-$(LZMA_VERSION) --strip-components 1
 	@echo "\033[36mDone extracting liblzma\033[0m"
-	@echo "\033[36mDownloading libsnappy version: ${SNAPPY_VERSION}\033[0m"
-	@curl -L https://github.com/google/snappy/releases/download/$(SNAPPY_VERSION)/snappy-$(SNAPPY_VERSION).tar.gz -o deps/libsnappy-$(SNAPPY_VERSION).tar.gz
-	@echo "\033[36mExtracting libsnappy\033[0m"
-	@cd deps; \
-	mkdir libsnappy-$(SNAPPY_VERSION); \
-	tar xzf libsnappy-$(SNAPPY_VERSION).tar.gz -C libsnappy-$(SNAPPY_VERSION) --strip-components 1
-	@echo "\033[36mDone extracting libsnappy\033[0m"
 	@echo "\033[36mDownloading liblz4 version: ${LZ4_VERSION}\033[0m"
 	@curl -L https://github.com/Cyan4973/lz4/archive/r$(LZ4_VERSION).tar.gz -o deps/liblz4-$(LZ4_VERSION).tar.gz
 	@echo "\033[36mExtracting liblz4\033[0m"
@@ -120,6 +123,13 @@ deps:
 	mkdir liblz4-$(LZ4_VERSION); \
 	tar xzf liblz4-$(LZ4_VERSION).tar.gz -C liblz4-$(LZ4_VERSION) --strip-components 1
 	@echo "\033[36mDone extracting liblz4\033[0m"
+	@echo "\033[36mDownloading libsnappy version: ${SNAPPY_VERSION}\033[0m"
+	@curl -L https://github.com/google/snappy/releases/download/$(SNAPPY_VERSION)/snappy-$(SNAPPY_VERSION).tar.gz -o deps/libsnappy-$(SNAPPY_VERSION).tar.gz
+	@echo "\033[36mExtracting libsnappy\033[0m"
+	@cd deps; \
+	mkdir libsnappy-$(SNAPPY_VERSION); \
+	tar xzf libsnappy-$(SNAPPY_VERSION).tar.gz -C libsnappy-$(SNAPPY_VERSION) --strip-components 1
+	@echo "\033[36mDone extracting libsnappy\033[0m"
 	@echo "\033[36mDownloading openssl version: ${OPENSSL_VERSION}\033[0m"
 	@curl -L https://github.com/openssl/openssl/archive/OpenSSL_$(OPENSSL_VERSION).tar.gz -o deps/openssl-$(OPENSSL_VERSION).tar.gz
 	@echo "\033[36mExtracting openssl\033[0m"
@@ -151,17 +161,6 @@ $(BUILD_DIR)/libs/liblzma.a: deps
 	@cp deps/liblzma-$(LZMA_VERSION)/src/liblzma/api/lzma.h $(BUILD_DIR)/libs; \
 	 cp -r deps/liblzma-$(LZMA_VERSION)/src/liblzma/api/lzma $(BUILD_DIR)/libs
 
-$(BUILD_DIR)/libs/libsnappy.a: deps
-	@echo "\033[1;4;32mBuilding libsnappy ${SNAPPY_VERSION}\033[0m"
-	@mkdir -p $(BUILD_DIR)/libs
-	@echo "\033[36mConfiguring libsnappy\033[0m"
-	@cd deps/libsnappy-$(SNAPPY_VERSION); \
-	./configure 2>&1 > /dev/null
-	@echo "\033[36mCompiling libsnappy\033[0m"
-	@$(MAKE) -j4 -C deps/libsnappy-$(SNAPPY_VERSION) CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
-	@cp deps/libsnappy-$(SNAPPY_VERSION)/.libs/libsnappy.a $(BUILD_DIR)/libs
-	@cp deps/libsnappy-$(SNAPPY_VERSION)/snappy-c.h $(BUILD_DIR)/libs
-
 $(BUILD_DIR)/libs/libjansson.a: deps
 	@echo "\033[1;4;32mBuilding libjansson ${JANSSON_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
@@ -175,19 +174,30 @@ $(BUILD_DIR)/libs/libjansson.a: deps
 	@cp deps/libjansson-$(JANSSON_VERSION)/build/lib/libjansson.a $(BUILD_DIR)/libs
 	@cp deps/libjansson-$(JANSSON_VERSION)/build/include/*.h $(BUILD_DIR)/libs
 
-$(BUILD_DIR)/libs/libavro.a: $(BUILD_DIR)/libs/liblzma.a $(BUILD_DIR)/libs/libsnappy.a $(BUILD_DIR)/libs/libjansson.a deps
+$(BUILD_DIR)/libs/libavro.a: $(BUILD_DIR)/libs/libsnappy.a $(BUILD_DIR)/libs/liblzma.a $(BUILD_DIR)/libs/libjansson.a deps
 	@echo "\033[1;4;32mBuilding libavro ${AVROC_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
 	@echo "\033[36mConfiguring libavro\033[0m"
-	@cd deps/libavro-$(AVROC_VERSION)/lang/c/; \
+	cd deps/libavro-$(AVROC_VERSION)/lang/c/; \
 	mkdir build; \
 	cd build; \
-	cmake .. -Wno-dev 2>&1 > /dev/null
+	cmake .. -Wno-dev -DCMAKE_C_FLAGS="-I`pwd`/../../../../../build/libs" -DJANSSON_FOUND=1 -DLZMA_FOUND=1 -DSNAPPY_INCLUDE_DIR="../../../../build/libs" -DSNAPPY_LIBRARIES=1
 	@echo "\033[36mCompiling libavro\033[0m"
-	@$(MAKE) -j4 -C deps/libavro-$(AVROC_VERSION)/lang/c/build CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
+	@$(MAKE) avro-static -j4 -C deps/libavro-$(AVROC_VERSION)/lang/c/build CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/libavro-$(AVROC_VERSION)/lang/c/build/src/libavro.a $(BUILD_DIR)/libs
 	@cp deps/libavro-$(AVROC_VERSION)/lang/c/src/avro.h $(BUILD_DIR)/libs; \
 	 cp -r deps/libavro-$(AVROC_VERSION)/lang/c/src/avro $(BUILD_DIR)/libs
+
+$(BUILD_DIR)/libs/libsnappy.a: deps
+	@echo "\033[1;4;32mBuilding libsnappy ${SNAPPY_VERSION}\033[0m"
+	@mkdir -p $(BUILD_DIR)/libs
+	@echo "\033[36mConfiguring libsnappy\033[0m"
+	@cd deps/libsnappy-$(SNAPPY_VERSION); \
+	./configure 2>&1 > /dev/null
+	@echo "\033[36mCompiling libsnappy\033[0m"
+	@$(MAKE) -j4 -C deps/libsnappy-$(SNAPPY_VERSION) CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
+	@cp deps/libsnappy-$(SNAPPY_VERSION)/.libs/libsnappy.a $(BUILD_DIR)/libs
+	@cp deps/libsnappy-$(SNAPPY_VERSION)/snappy-c.h $(BUILD_DIR)/libs
 
 $(BUILD_DIR)/libs/libserdes.a: $(BUILD_DIR)/libs/libavro.a $(BUILD_DIR)/libs/libcurl.a deps
 	@echo "\033[1;4;32mBuilding libserdes ${SERDES_VERSION}\033[0m"
@@ -256,7 +266,7 @@ $(BUILD_DIR)/libs/libsasl2.a: deps
 	@cp deps/sasl-$(OPENSSL_VERSION)/*.a $(BUILD_DIR)/libs
 	@cp -LR deps/sasl-$(OPENSSL_VERSION)/include/sasl $(BUILD_DIR)/libs
 
-$(BUILD_DIR)/tests/libcmocka.dylib: test-deps
+$(BUILD_DIR)/tests/libcmocka.$(DYNAMIC_SUFFIX): test-deps
 	@echo "\033[1;4;32mBuilding libcmocka ${CMOCKA_VERSION}\033[0m"
 	@mkdir -p test-deps/cmocka-$(CMOCKA_VERSION)/build
 	@mkdir -p $(BUILD_DIR)/tests
@@ -266,9 +276,11 @@ $(BUILD_DIR)/tests/libcmocka.dylib: test-deps
 	@echo "\033[36mCompiling libcmocka\033[0m"
 	@$(MAKE) -C test-deps/cmocka-$(CMOCKA_VERSION)/build -s 2>&1 > /dev/null
 	@cd test-deps/cmocka-$(CMOCKA_VERSION)/build; \
-	cp src/libcmocka.dylib ../../../$(BUILD_DIR)/tests
+	cp src/libcmocka.$(DYNAMIC_SUFFIX) ../../../$(BUILD_DIR)/tests
 	@echo "\033[36mDone compiling libcmocka\033[0m"
 
+# librdkafka contains a straight c port of snappy with conflicting symbols for snappy
+# tinycthread is used in multiple edenhill projects, only use one of them
 $(BUILD_DIR)/dependencies.o: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a
 	@echo "\033[1;4;32mCreating libganglion dependency object\033[0m"
 	@cd $(BUILD_DIR)/libs; \
@@ -276,30 +288,25 @@ $(BUILD_DIR)/dependencies.o: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/li
 	mkdir -p libserdes && cd libserdes && $(AR) -x ../libserdes.a && cd ..; \
 	mkdir -p libcurl && cd libcurl && $(AR) -x ../libcurl.a && cd ..; \
 	mkdir -p libavro && cd libavro && $(AR) -x ../libavro.a && cd ..; \
+	mkdir -p libsnappy && cd libsnappy && $(AR) -x ../libsnappy.a && cd ..; \
 	mkdir -p libjansson && cd libjansson && $(AR) -x ../libjansson.a && cd ..; \
 	mkdir -p liblzma && cd liblzma && $(AR) -x ../liblzma.a && cd ..; \
-	mkdir -p libsnappy && cd libsnappy && $(AR) -x ../libsnappy.a && cd ..; \
 	mkdir -p liblz4 && cd liblz4 && $(AR) -x ../liblz4.a && cd ..; \
 	mkdir -p libssl && cd libssl && $(AR) -x ../libssl.a && cd ..; \
 	mkdir -p libcrypto && cd libcrypto && $(AR) -x ../libcrypto.a
 	@echo "\033[1;4;32mRemoving conflicting symbols\033[0m"
-	@rm $(BUILD_DIR)/libs/libsnappy/snappy-c.o $(BUILD_DIR)/libs/librdkafka/tinycthread.o
+	@sh -c $(SNAPPY_SYMBOL_CONFLICT_RESOLVE)
+	@rm $(BUILD_DIR)/libs/librdkafka/tinycthread.o
 	@echo "\033[1;4;32mRe-linking library dependencies\033[0m"
-	@cd $(BUILD_DIR)/libs; \
-  ld -r -x -o ../dependencies.o */*.o; \
+	cd $(BUILD_DIR); \
+  ld -r -o dependencies.o libs/*/*.o; \
+	sh -c $(CREATE_ARCHIVE_COMMAND)
 
 $(BUILD_DIR)/libganglion.a: $(OBJECTS) $(BUILD_DIR)/dependencies.o
 	@echo "\033[1;4;32mCreating libganglion static library\033[0m"
 	@cd $(BUILD_DIR); \
-	ld -r -x -exported_symbol "_ganglion*" -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS)); \
 	ar -r libganglion.a ganglion.o
 	@echo "\033[36mDone creating libganglion.a\033[0m"
-
-$(BUILD_DIR)/libganglion.dylib: $(OBJECTS) $(BUILD_DIR)/dependencies.o
-	@echo "\033[1;4;32mCreating libganglion dynamic library\033[0m"
-	@cd $(BUILD_DIR)/libs; \
-	$(CC) -shared -o ../libganglion.dylib $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS)) ../dependencies.o $(LDFLAGS) -Wl,-exported_symbol -Wl,"_ganglion*"
-	@echo "\033[36mDone creating libganglion.dylib\033[0m"
 
 $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a src/examples/basic.c
 	@echo "\033[1;4;32mCompiling basic example\033[0m"
@@ -314,7 +321,7 @@ $(BUILD_DIR)/go-example: go/examples/basic.go
 	@go build -o $@ go/examples/basic.go
 	@echo "\033[36mDone compiling $@\033[0m"
 
-$(BUILD_DIR)/rust-example: $(BUILD_DIR)/libganglion.dylib rust/examples/basic.rs
+$(BUILD_DIR)/rust-example: rust/examples/basic.rs
 	@echo "\033[1;4;32mCompiling basic rust example\033[0m"
 	@cd rust; \
 	LIBRARY_PATH=../$(BUILD_DIR) cargo build --example basic
@@ -333,7 +340,7 @@ $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
 	$(CC) -c $(CFLAGS) $< -o $@
 	@echo "\033[36mDone compiling $<\033[0m"
 
-$(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c $(BUILD_DIR)/tests/libcmocka.dylib
+$(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c $(BUILD_DIR)/tests/libcmocka.$(DYNAMIC_SUFFIX)
 	@echo "\033[1;4;32mCompiling $<\033[0m"
 	@$(CC) -c $(CFLAGS) $(TEST_CFLAGS) $< -o $@
 	@echo "\033[36mDone compiling $<\033[0m"
@@ -347,18 +354,17 @@ $(BUILD_DIR)/tests/libganglion_test_suite: $(TEST_OBJECTS) $(BUILD_DIR)/libgangl
 
 run-tests: tests
 	@echo "\033[1;4;32mRunning libganglion test suite\033[0m"
-	@CMOCKA_TEST_ABORT='1' ./$(BUILD_DIR)/tests/libganglion_test_suite #needed for threading
+	@sh -c $(TEST_RUNNER) #needed for threading
 
 distclean:
 	rm -rf $(BUILD_DIR) deps test-deps rust/target rust/Cargo.lock
 
 clean:
-	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib $(BUILD_DIR)/example $(BUILD_DIR)/go-example $(BUILD_DIR)/libs/*.o $(BUILD_DIR)/tests/*.o $(BUILD_DIR)/tests/libganglion*
+	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/example $(BUILD_DIR)/go-example $(BUILD_DIR)/libs/*.o $(BUILD_DIR)/tests/*.o $(BUILD_DIR)/tests/libganglion*
 
-install: $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.dylib $(SOURCE_DIR)/ganglion.h
+install: $(BUILD_DIR)/libganglion.a $(SOURCE_DIR)/ganglion.h
 	install -m 0644 $(SOURCE_DIR)/ganglion.h $(PREFIX)/include
 	install -m 0644 $(BUILD_DIR)/libganglion.a $(PREFIX)/lib
-	install -m 0644 $(BUILD_DIR)/libganglion.dylib $(PREFIX)/lib
 	install -m 0644 $(SOURCE_DIR)/libganglion.pc $(PREFIX)/lib/pkgconfig/
 
 uninstall:

@@ -9,9 +9,9 @@
 static void report_callback_wrapper(rd_kafka_t *kafka, const rd_kafka_message_t *message, void *context) {
   struct ganglion_producer * self = (struct ganglion_producer *)context;
 
-  assert(self);
+  assert(self != NULL);
   struct ganglion_producer_internal * internal = (struct ganglion_producer_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   //TODO: error handling, maybe something like:
   //if (message->err) (internal->error_callback)(internal->context, rd_kafka_topic_name(message->rkt), (char *)message->err, message->len);
@@ -70,7 +70,7 @@ static struct ganglion_producer_internal * ganglion_producer_internal_new(struct
     assert(rd_kafka_conf_set(self->config, "queue.buffering.max.ms", flush_timeout, NULL, 0) == RD_KAFKA_CONF_OK);
   }
 
-  assert(self->producer = rd_kafka_new(RD_KAFKA_PRODUCER, self->config, NULL, 0));
+  assert((self->producer = rd_kafka_new(RD_KAFKA_PRODUCER, self->config, NULL, 0)) != NULL);
   assert(rd_kafka_brokers_add(self->producer, brokers) != 0);
 
   assert(!pthread_create(&self->worker, &attr, ganglion_producer_poller_thread, (void *)self));
@@ -109,9 +109,9 @@ struct ganglion_producer * ganglion_producer_new(const char *brokers, const char
 }
 
 void ganglion_producer_cleanup(struct ganglion_producer * producer) {
-  assert(producer);
+  assert(producer != NULL);
   struct ganglion_producer_internal * internal = (struct ganglion_producer_internal *)producer->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   if (GANGLION_DEBUG)
     printf("Cleaning up producer\n");
@@ -121,9 +121,9 @@ void ganglion_producer_cleanup(struct ganglion_producer * producer) {
 }
 
 void ganglion_producer_publish(struct ganglion_producer * self, char * topic, char * payload, long long length) {
-  assert(self);
+  assert(self != NULL);
   struct ganglion_producer_internal * internal = (struct ganglion_producer_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   rd_kafka_topic_t * kafka_topic = rd_kafka_topic_new(internal->producer, topic, rd_kafka_topic_conf_dup(internal->topic_config));
   assert(rd_kafka_produce(kafka_topic, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY, payload, length, NULL, 0, (void *)self) != -1);

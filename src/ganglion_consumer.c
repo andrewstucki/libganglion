@@ -66,7 +66,7 @@ static struct ganglion_consumer_internal * ganglion_consumer_internal_new(struct
 }
 
 static void ganglion_consumer_internal_cleanup(struct ganglion_consumer_internal * internal) {
-  assert(internal);
+  assert(internal != NULL);
   assert(internal->status != GANGLION_THREAD_STARTED);
 
   rd_kafka_topic_partition_list_destroy(internal->topics);
@@ -82,7 +82,7 @@ static void ganglion_consumer_internal_set_group(struct ganglion_consumer_intern
 }
 
 static void ganglion_consumer_internal_initialize(struct ganglion_consumer_internal * self, const char *brokers, const char *topic) {
-  assert(self->consumer = rd_kafka_new(RD_KAFKA_CONSUMER, self->config, NULL, 0));
+  assert((self->consumer = rd_kafka_new(RD_KAFKA_CONSUMER, self->config, NULL, 0)) != NULL);
   rd_kafka_set_log_level(self->consumer, LOG_DEBUG);
   assert(rd_kafka_brokers_add(self->consumer, brokers) != 0);
   rd_kafka_poll_set_consumer(self->consumer);
@@ -109,7 +109,7 @@ static void ganglion_consumer_internal_consume(struct ganglion_consumer_internal
       printf("Main consumer loop for topic: %s\n", consumer->topic);
     for (i = 0; i < consumer->worker_size; i++) {
       rd_kafka_message_t *message;
-      self->workers[i] = NULL;
+      self->workers[i] = 0;
       if ((message = rd_kafka_consumer_poll(self->consumer, 1000)) != NULL) {
         enum ganglion_message_status message_check = ganglion_consumer_internal_check_message(message);
         if (message_check == GANGLION_MSG_ERROR) {
@@ -158,7 +158,7 @@ static void ganglion_consumer_internal_consume(struct ganglion_consumer_internal
       }
     }
     for (i = 0; i < consumer->worker_size; i++) {
-      if (self->workers[i] != NULL) {
+      if (self->workers[i] != 0) {
         assert(!pthread_join(self->workers[i], NULL));
       } else {
         break;
@@ -196,7 +196,7 @@ struct ganglion_consumer * ganglion_consumer_new(const char * brokers, int worke
 }
 
 void ganglion_consumer_cleanup(struct ganglion_consumer *consumer) {
-  assert(consumer);
+  assert(consumer != NULL);
 
   ganglion_consumer_internal_cleanup((struct ganglion_consumer_internal *)consumer->opaque);
 
@@ -205,9 +205,9 @@ void ganglion_consumer_cleanup(struct ganglion_consumer *consumer) {
 }
 
 void ganglion_consumer_start(struct ganglion_consumer *self) {
-  assert(self);
+  assert(self != NULL);
   struct ganglion_consumer_internal * internal = (struct ganglion_consumer_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
   assert(internal->status != GANGLION_THREAD_STARTED);
   internal->status = GANGLION_THREAD_STARTED;
@@ -215,12 +215,13 @@ void ganglion_consumer_start(struct ganglion_consumer *self) {
 }
 
 void ganglion_consumer_wait(struct ganglion_consumer *self) {
-  assert(self);
+  assert(self != NULL);
   struct ganglion_consumer_internal * internal = (struct ganglion_consumer_internal *)self->opaque;
-  assert(internal);
+  assert(internal != NULL);
 
-  for (int i = 0; i < self->worker_size; i++) {
-    if (internal->workers[i] != NULL) {
+  int i;
+  for (i = 0; i < self->worker_size; i++) {
+    if (internal->workers[i] != 0) {
       pthread_join(internal->workers[i], NULL);
     }
   }
@@ -228,7 +229,7 @@ void ganglion_consumer_wait(struct ganglion_consumer *self) {
 
 void ganglion_consumer_stop(struct ganglion_consumer *self) {
   struct ganglion_consumer_internal * internal;
-  assert(self);
+  assert(self != NULL);
   assert((internal = (struct ganglion_consumer_internal *)self->opaque) != NULL);
   assert(internal->status == GANGLION_THREAD_STARTED);
   internal->status = GANGLION_THREAD_CANCELED; //stops loop;
