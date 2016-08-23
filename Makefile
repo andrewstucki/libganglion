@@ -27,15 +27,16 @@ LZMA_VERSION = 5.2.2
 PLATFORM := $(shell uname -s)
 ifeq ($(PLATFORM),Linux)
 		LDFLAGS += -lstdc++ -ldl -lrt
-		DYNAMIC_SUFFIX = "so"
+		DYNAMIC_SUFFIX = so
 		SNAPPY_SYMBOL_CONFLICT_RESOLVE = "objcopy --redefine-sym snappy_compress=rd_snappy_compress --redefine-sym snappy_uncompress=rd_snappy_uncompress --redefine-sym snappy_max_compressed_length=rd_snappy_max_compressed_length --redefine-sym snappy_uncompressed_length=rd_snappy_uncompressed_length $(BUILD_DIR)/libs/librdkafka/snappy.o"
 		CREATE_ARCHIVE_COMMAND = "ld -r -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,%,$(OBJECTS)) && objcopy -w -G \"ganglion*\" ganglion.o"
 		OPENSSL_CONFIGURE = "./Configure -fPIC linux-x86_64 no-shared"
 		TEST_RUNNER = "CMOCKA_TEST_ABORT='1' LD_PRELOAD=$(BUILD_DIR)/tests/libcmocka.so $(BUILD_DIR)/tests/libganglion_test_suite"
+		SO_CFLAGS = -Wl,-soname,libganglion.so
 endif
 ifeq ($(PLATFORM),Darwin)
 		LDFLAGS += -lc++
-		DYNAMIC_SUFFIX = "dylib"
+		DYNAMIC_SUFFIX = dylib
 		SNAPPY_SYMBOL_CONFLICT_RESOLVE = "ld -r -o $(BUILD_DIR)/libs/librdkafka/rd_kafka_snappy.o $(BUILD_DIR)/libs/librdkafka/snappy.o -alias _snappy_compress _rd_snappy_compress -alias _snappy_uncompress _rd_snappy_uncompress -alias _snappy_max_compressed_length _rd_snappy_max_compressed_length -alias _snappy_uncompressed_length _rd_snappy_uncompressed_length -unexported_symbol _snappy_compress -unexported_symbol _snappy_uncompress -unexported_symbol _snappy_max_compressed_length -unexported_symbol _snappy_uncompressed_length && rm $(BUILD_DIR)/libs/librdkafka/snappy.o"
 		CREATE_ARCHIVE_COMMAND = "ld -r -x -exported_symbol "_ganglion*" -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,%,$(OBJECTS))"
 		OPENSSL_CONFIGURE = "./Configure -fPIC darwin64-x86_64-cc no-shared"
@@ -66,7 +67,7 @@ TEST_LDFLAGS = -L./build/tests -lcmocka
 TEST_SOURCES = ganglion_consumer_test.c ganglion_producer_test.c ganglion_supervisor_test.c ganglion_test_helpers.c ganglion_test_suite.c
 TEST_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
 
-lib: clean $(BUILD_DIR)/libganglion.a
+lib: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.$(DYNAMIC_SUFFIX)
 example: clean $(BUILD_DIR)/example
 go-example: $(BUILD_DIR)/go-example
 rust-example: $(BUILD_DIR)/rust-example
@@ -75,7 +76,7 @@ cpp-example: $(BUILD_DIR)/cpp-example
 examples: example go-example rust-example cpp-example
 
 tests: CFLAGS += -DUNIT_TESTING=1
-tests: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/tests/libganglion_test_suite
+tests: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.$(DYNAMIC_SUFFIX) $(BUILD_DIR)/tests/libganglion_test_suite
 
 deps:
 	@echo "\033[1;4;32mDownloading dependant libraries\033[0m"
@@ -270,7 +271,7 @@ $(BUILD_DIR)/tests/libcmocka.$(DYNAMIC_SUFFIX): test-deps
 
 # librdkafka contains a straight c port of snappy with conflicting symbols for snappy
 # tinycthread is used in multiple edenhill projects, only use one of them
-$(BUILD_DIR)/dependencies.o: $(OBJECTS) $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a
+$(BUILD_DIR)/ganglion.o: $(OBJECTS) $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a
 	@echo "\033[1;4;32mCreating libganglion dependency object\033[0m"
 	@cd $(BUILD_DIR)/libs; \
 	mkdir -p librdkafka && cd librdkafka && $(AR) -x ../librdkafka.a && cd ..; \
@@ -291,7 +292,7 @@ $(BUILD_DIR)/dependencies.o: $(OBJECTS) $(BUILD_DIR)/libs/librdkafka.a $(BUILD_D
   ld -r -o dependencies.o libs/*/*.o; \
 	sh -c $(CREATE_ARCHIVE_COMMAND)
 
-$(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/dependencies.o $(OBJECTS)
+$(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/ganglion.o $(OBJECTS)
 	@echo "\033[1;4;32mCreating libganglion static library\033[0m"
 	@cd $(BUILD_DIR); \
 	ar -r libganglion.a ganglion.o ; \
@@ -343,6 +344,10 @@ $(BUILD_DIR)/tests/libganglion_test_suite: $(TEST_OBJECTS) $(BUILD_DIR)/libgangl
 $(BUILD_DIR)/libganglion.pc:
 	@sed -e 's/@libraries@/$(LDFLAGS)/' $(SOURCE_DIR)/libganglion.pc.in > $(BUILD_DIR)/libganglion.pc
 
+$(BUILD_DIR)/libganglion.$(DYNAMIC_SUFFIX): $(BUILD_DIR)/ganglion.o
+	@echo "\033[1;4;32mCreating libganglion dynamic library\033[0m"
+	@gcc -shared -o $(BUILD_DIR)/libganglion.$(DYNAMIC_SUFFIX) $(SO_CFLAGS) $(BUILD_DIR)/ganglion.o $(LDFLAGS)
+
 .PHONY: clean distclean install run-tests
 
 run-tests: tests
@@ -353,11 +358,12 @@ distclean:
 	rm -rf $(BUILD_DIR) deps test-deps rust/target rust/Cargo.lock
 
 clean:
-	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/example $(BUILD_DIR)/go-example $(BUILD_DIR)/libs/*.o $(BUILD_DIR)/tests/*.o $(BUILD_DIR)/tests/libganglion*
+	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.$(DYNAMIC_SUFFIX) $(BUILD_DIR)/example $(BUILD_DIR)/go-example $(BUILD_DIR)/libs/*.o $(BUILD_DIR)/tests/*.o $(BUILD_DIR)/tests/libganglion*
 
-install: $(BUILD_DIR)/libganglion.a $(SOURCE_DIR)/ganglion.h $(BUILD_DIR)/libganglion.pc
+install: $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.$(DYNAMIC_SUFFIX) $(SOURCE_DIR)/ganglion.h $(BUILD_DIR)/libganglion.pc
 	install -m 0644 $(SOURCE_DIR)/ganglion.h $(PREFIX)/include
 	install -m 0644 $(BUILD_DIR)/libganglion.a $(PREFIX)/lib
+	install -m 0644 $(BUILD_DIR)/libganglion.$(DYNAMIC_SUFFIX) $(PREFIX)/lib
 	mkdir -p $(PREFIX)/lib/pkgconfig/
 	install -m 0644 $(BUILD_DIR)/libganglion.pc $(PREFIX)/lib/pkgconfig/
 
