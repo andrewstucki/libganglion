@@ -340,6 +340,9 @@ $(BUILD_DIR)/tests/libganglion_test_suite: $(TEST_OBJECTS) $(BUILD_DIR)/libgangl
 	@$(CC) $(TEST_OBJECTS) -o $(BUILD_DIR)/tests/libganglion_test_suite $(BUILD_DIR)/libganglion.a $(CFLAGS) $(TEST_CFLAGS) $(TEST_LDFLAGS) $(LDFLAGS)
 	@echo "\033[36mDone compiling libganglion test suite\033[0m"
 
+$(BUILD_DIR)/libganglion.pc:
+	@sed -e 's/@libraries@/$(LDFLAGS)/' $(SOURCE_DIR)/libganglion.pc.in > $(BUILD_DIR)/libganglion.pc
+
 .PHONY: clean distclean install run-tests
 
 run-tests: tests
@@ -352,10 +355,11 @@ distclean:
 clean:
 	rm -rf $(BUILD_DIR)/*.o $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/example $(BUILD_DIR)/go-example $(BUILD_DIR)/libs/*.o $(BUILD_DIR)/tests/*.o $(BUILD_DIR)/tests/libganglion*
 
-install: $(BUILD_DIR)/libganglion.a $(SOURCE_DIR)/ganglion.h
+install: $(BUILD_DIR)/libganglion.a $(SOURCE_DIR)/ganglion.h $(BUILD_DIR)/libganglion.pc
 	install -m 0644 $(SOURCE_DIR)/ganglion.h $(PREFIX)/include
 	install -m 0644 $(BUILD_DIR)/libganglion.a $(PREFIX)/lib
-	install -m 0644 $(SOURCE_DIR)/libganglion.pc $(PREFIX)/lib/pkgconfig/
+	mkdir -p $(PREFIX)/lib/pkgconfig/
+	install -m 0644 $(BUILD_DIR)/libganglion.pc $(PREFIX)/lib/pkgconfig/
 
 uninstall:
 	rm -f $(PREFIX)/include/ganglion.h $(PREFIX)/lib/libganglion.a

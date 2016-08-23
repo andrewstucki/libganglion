@@ -7,5 +7,5 @@ Name: LibGanglion
 Description: Kafka 0.9 high level managed library
 Version: 0.0.1
 Requires:
-Libs: ${libdir}/libganglion.a -lz -lpthread -lc++ # -lstdc++ -lpthread -lrt -lz -ldl
+Libs: ${libdir}/libganglion.a @libraries@
 Cflags: -I${includedir}
