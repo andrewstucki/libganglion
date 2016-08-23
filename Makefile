@@ -43,8 +43,6 @@ else
 endif
 
 ifndef NO_SSL
-	OPENSSL_LIBS = $(shell pkg-config --libs openssl)
-	LDFLAGS += $(OPENSSL_LIBS)
 	RDKAFKA_CONFIG_FLAGS += --enable-ssl
 	RDKAFKA_SSL = "with"
 else
@@ -271,8 +269,8 @@ $(BUILD_DIR)/tests/libcmocka.dylib: test-deps
 	cp src/libcmocka.dylib ../../../$(BUILD_DIR)/tests
 	@echo "\033[36mDone compiling libcmocka\033[0m"
 
-$(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a $(OBJECTS)
-	@echo "\033[1;4;32mCreating libganglion static library\033[0m"
+$(BUILD_DIR)/dependencies.o: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a
+	@echo "\033[1;4;32mCreating libganglion dependency object\033[0m"
 	@cd $(BUILD_DIR)/libs; \
 	mkdir -p librdkafka && cd librdkafka && $(AR) -x ../librdkafka.a && cd ..; \
 	mkdir -p libserdes && cd libserdes && $(AR) -x ../libserdes.a && cd ..; \
@@ -283,20 +281,30 @@ $(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/lib
 	mkdir -p libsnappy && cd libsnappy && $(AR) -x ../libsnappy.a && cd ..; \
 	mkdir -p liblz4 && cd liblz4 && $(AR) -x ../liblz4.a && cd ..; \
 	mkdir -p libssl && cd libssl && $(AR) -x ../libssl.a && cd ..; \
-	mkdir -p libcrypto && cd libcrypto && $(AR) -x ../libcrypto.a && cd ..; \
-	$(AR) -r ../libganglion.a lib*/*.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS))
+	mkdir -p libcrypto && cd libcrypto && $(AR) -x ../libcrypto.a
+	@echo "\033[1;4;32mRemoving conflicting symbols\033[0m"
+	@rm $(BUILD_DIR)/libs/libsnappy/snappy-c.o $(BUILD_DIR)/libs/librdkafka/tinycthread.o
+	@echo "\033[1;4;32mRe-linking library dependencies\033[0m"
+	@cd $(BUILD_DIR)/libs; \
+  ld -r -x -o ../dependencies.o */*.o; \
+
+$(BUILD_DIR)/libganglion.a: $(OBJECTS) $(BUILD_DIR)/dependencies.o
+	@echo "\033[1;4;32mCreating libganglion static library\033[0m"
+	@cd $(BUILD_DIR); \
+	ld -r -x -exported_symbol "_ganglion*" -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS)); \
+	ar -r libganglion.a ganglion.o
 	@echo "\033[36mDone creating libganglion.a\033[0m"
 
-$(BUILD_DIR)/libganglion.dylib: $(OBJECTS)
+$(BUILD_DIR)/libganglion.dylib: $(OBJECTS) $(BUILD_DIR)/dependencies.o
 	@echo "\033[1;4;32mCreating libganglion dynamic library\033[0m"
 	@cd $(BUILD_DIR)/libs; \
-	$(CC) -shared -o ../libganglion.dylib *.o $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS)) $(LDFLAGS)
+	$(CC) -shared -o ../libganglion.dylib $(patsubst $(BUILD_DIR)/%,../%,$(OBJECTS)) ../dependencies.o $(LDFLAGS) -Wl,-exported_symbol -Wl,"_ganglion*"
 	@echo "\033[36mDone creating libganglion.dylib\033[0m"
 
 $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a src/examples/basic.c
 	@echo "\033[1;4;32mCompiling basic example\033[0m"
 	@$(CC) -c $(CFLAGS) src/examples/basic.c -o $(BUILD_DIR)/example.o
-	@$(CC) -O3 -o $@ $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS) $(OPENSSL_LIBS)
+	@$(CC) -o $@ $(BUILD_DIR)/libs/libssl.a $(BUILD_DIR)/example.o $(BUILD_DIR)/libganglion.a $(LDFLAGS)
 	@strip $@
 	@echo "\033[36mDone compiling $@\033[0m"
 
@@ -322,7 +330,7 @@ $(BUILD_DIR)/cpp-example: $(BUILD_DIR)/libganglion.a src/examples/basic.cpp
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
 	@echo "\033[1;4;32mCompiling $<\033[0m"
-	@$(CC) -c $(CFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $< -o $@
 	@echo "\033[36mDone compiling $<\033[0m"
 
 $(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.c $(BUILD_DIR)/tests/libcmocka.dylib
