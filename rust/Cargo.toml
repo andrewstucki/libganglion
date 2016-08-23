@@ -2,6 +2,7 @@
 name = "ganglion"
 version = "0.1.0"
 authors = ["Andrew Stucki <andrew.stucki@govdelivery.com>"]
+build = "build.rs"
 
 [dependencies]
 libc = "0.2.14"

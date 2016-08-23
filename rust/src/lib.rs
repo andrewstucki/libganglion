@@ -248,7 +248,7 @@ struct CGanglionProducer {
     opaque: *mut c_void
 }
 
-#[link(name = "ganglion")]
+// #[link(name = "ganglion", kind = "static")]
 extern "C" {
     fn ganglion_consumer_new(brokers: *const c_char, workers: c_int, topic: *const c_char, group: *const c_char, context: *mut c_void, callback: extern "C" fn(context: *mut c_void, message: *mut c_char, message_size: c_int, partition: c_int, offset: c_long)) -> *mut CGanglionConsumer;
     fn ganglion_consumer_cleanup(consumer: *mut CGanglionConsumer);

@@ -30,7 +30,7 @@ ifeq ($(PLATFORM),Linux)
 		DYNAMIC_SUFFIX = "so"
 		SNAPPY_SYMBOL_CONFLICT_RESOLVE = "objcopy --redefine-sym snappy_compress=rd_snappy_compress --redefine-sym snappy_uncompress=rd_snappy_uncompress --redefine-sym snappy_max_compressed_length=rd_snappy_max_compressed_length --redefine-sym snappy_uncompressed_length=rd_snappy_uncompressed_length $(BUILD_DIR)/libs/librdkafka/snappy.o"
 		CREATE_ARCHIVE_COMMAND = "ld -r -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,%,$(OBJECTS)) && objcopy -w -G \"ganglion*\" ganglion.o"
-		OPENSSL_CONFIGURE = "./config no-shared"
+		OPENSSL_CONFIGURE = "./Configure -fPIC linux-x86_64 no-shared"
 		TEST_RUNNER = "CMOCKA_TEST_ABORT='1' LD_PRELOAD=$(BUILD_DIR)/tests/libcmocka.so $(BUILD_DIR)/tests/libganglion_test_suite"
 endif
 ifeq ($(PLATFORM),Darwin)
@@ -38,7 +38,7 @@ ifeq ($(PLATFORM),Darwin)
 		DYNAMIC_SUFFIX = "dylib"
 		SNAPPY_SYMBOL_CONFLICT_RESOLVE = "ld -r -o $(BUILD_DIR)/libs/librdkafka/rd_kafka_snappy.o $(BUILD_DIR)/libs/librdkafka/snappy.o -alias _snappy_compress _rd_snappy_compress -alias _snappy_uncompress _rd_snappy_uncompress -alias _snappy_max_compressed_length _rd_snappy_max_compressed_length -alias _snappy_uncompressed_length _rd_snappy_uncompressed_length -unexported_symbol _snappy_compress -unexported_symbol _snappy_uncompress -unexported_symbol _snappy_max_compressed_length -unexported_symbol _snappy_uncompressed_length && rm $(BUILD_DIR)/libs/librdkafka/snappy.o"
 		CREATE_ARCHIVE_COMMAND = "ld -r -x -exported_symbol "_ganglion*" -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,%,$(OBJECTS))"
-		OPENSSL_CONFIGURE = "./Configure darwin64-x86_64-cc no-shared"
+		OPENSSL_CONFIGURE = "./Configure -fPIC darwin64-x86_64-cc no-shared"
 		TEST_RUNNER = "CMOCKA_TEST_ABORT='1' $(BUILD_DIR)/tests/libganglion_test_suite"
 endif
 
@@ -168,9 +168,9 @@ $(BUILD_DIR)/libs/libjansson.a: deps
 	@cd deps/libjansson-$(JANSSON_VERSION); \
 	mkdir build; \
 	cd build; \
-	cmake .. -Wno-dev 2>&1 > /dev/null
+	cmake .. -Wno-dev -DCMAKE_C_FLAGS="-w -fPIC" 2>&1 > /dev/null
 	@echo "\033[36mCompiling libjansson\033[0m"
-	@$(MAKE) -j4 -C deps/libjansson-$(JANSSON_VERSION)/build CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
+	@$(MAKE) -j4 -C deps/libjansson-$(JANSSON_VERSION)/build -s 2>&1 > /dev/null
 	@cp deps/libjansson-$(JANSSON_VERSION)/build/lib/libjansson.a $(BUILD_DIR)/libs
 	@cp deps/libjansson-$(JANSSON_VERSION)/build/include/*.h $(BUILD_DIR)/libs
 
@@ -178,10 +178,10 @@ $(BUILD_DIR)/libs/libavro.a: $(BUILD_DIR)/libs/libsnappy.a $(BUILD_DIR)/libs/lib
 	@echo "\033[1;4;32mBuilding libavro ${AVROC_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
 	@echo "\033[36mConfiguring libavro\033[0m"
-	cd deps/libavro-$(AVROC_VERSION)/lang/c/; \
+	@cd deps/libavro-$(AVROC_VERSION)/lang/c/; \
 	mkdir build; \
 	cd build; \
-	cmake .. -Wno-dev -DCMAKE_C_FLAGS="-I`pwd`/../../../../../build/libs" -DJANSSON_FOUND=1 -DLZMA_FOUND=1 -DSNAPPY_INCLUDE_DIR="../../../../build/libs" -DSNAPPY_LIBRARIES=1
+	cmake .. -Wno-dev -DCMAKE_C_FLAGS="-I`pwd`/../../../../../build/libs -w -fPIC" -DJANSSON_FOUND=1 -DLZMA_FOUND=1 -DSNAPPY_INCLUDE_DIR="../../../../build/libs" -DSNAPPY_LIBRARIES=1
 	@echo "\033[36mCompiling libavro\033[0m"
 	@$(MAKE) avro-static -j4 -C deps/libavro-$(AVROC_VERSION)/lang/c/build CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/libavro-$(AVROC_VERSION)/lang/c/build/src/libavro.a $(BUILD_DIR)/libs
@@ -195,7 +195,7 @@ $(BUILD_DIR)/libs/libsnappy.a: deps
 	@cd deps/libsnappy-$(SNAPPY_VERSION); \
 	./configure 2>&1 > /dev/null
 	@echo "\033[36mCompiling libsnappy\033[0m"
-	@$(MAKE) -j4 -C deps/libsnappy-$(SNAPPY_VERSION) CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
+	$(MAKE) -j4 -C deps/libsnappy-$(SNAPPY_VERSION) CXXFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/libsnappy-$(SNAPPY_VERSION)/.libs/libsnappy.a $(BUILD_DIR)/libs
 	@cp deps/libsnappy-$(SNAPPY_VERSION)/snappy-c.h $(BUILD_DIR)/libs
 
@@ -211,25 +211,25 @@ $(BUILD_DIR)/libs/libserdes.a: $(BUILD_DIR)/libs/libavro.a $(BUILD_DIR)/libs/lib
 	@mkdir -p $(BUILD_DIR)/libs/serdes
 	@cp deps/libserdes-$(SERDES_VERSION)/src/serdes*.h $(BUILD_DIR)/libs/serdes
 
-$(BUILD_DIR)/libs/librdkafka.a: $(BUILD_DIR)/libs/liblz4.a deps
+$(BUILD_DIR)/libs/librdkafka.a: deps $(BUILD_DIR)/libs/liblz4.a
 	@echo "\033[1;4;32mBuilding librdkafka ${RDKAFKA_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
 	@echo "\033[36mConfiguring librdkafka ${RDKAFKA_SSL} ssl support and ${RDKAFKA_SASL} sasl support\033[0m"
 	@cd deps/librdkafka-$(RDKAFKA_VERSION); \
 	./configure $(RDKAFKA_CONFIG_FLAGS) 2>&1 > /dev/null
 	@echo "\033[36mCompiling librdkafka\033[0m"
-	@$(MAKE) librdkafka.a -j4 -C deps/librdkafka-$(RDKAFKA_VERSION)/src -s 2>&1 > /dev/null
+	@$(MAKE) librdkafka.a -j4 -C deps/librdkafka-$(RDKAFKA_VERSION)/src CFLAGS="-w -fPIC -I`pwd`/$(BUILD_DIR)/libs" -s 2>&1 > /dev/null
 	@cd deps/librdkafka-$(RDKAFKA_VERSION); \
 	cp $(SOURCE_DIR)/rdkafka.h ../../$(BUILD_DIR)/libs; \
 	cp $(SOURCE_DIR)/librdkafka.a ../../$(BUILD_DIR)/libs
 	@echo "\033[36mDone compiling librdkafka\033[0m"
 
-$(BUILD_DIR)/libs/libcurl.a: $(BUILD_DIR)/libs/libssl.a deps
+$(BUILD_DIR)/libs/libcurl.a: $(BUILD_DIR)/libs/libssl.a
 	@echo "\033[1;4;32mBuilding libcurl ${CURL_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
 	@echo "\033[36mConfiguring libcurl\033[0m"
 	@cd deps/libcurl-$(CURL_VERSION); \
-	./configure CFLAGS="-I../../$(BUILD_DIR)/libs" --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-proxy --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-manual 2>&1 > /dev/null
+	./configure CFLAGS="-I../../$(BUILD_DIR)/libs -fPIC -w" --disable-ftp --disable-file --disable-ldap --disable-ldaps --disable-rtsp --disable-proxy --disable-dict --disable-telnet --disable-tftp --disable-pop3 --disable-imap --disable-smb --disable-smtp --disable-gopher --disable-manual 2>&1 > /dev/null
 	@echo "\033[36mCompiling libcurl\033[0m"
 	@$(MAKE) -j4 -C deps/libcurl-$(CURL_VERSION) -s 2>&1 > /dev/null
 	@mkdir -p $(BUILD_DIR)/libs/curl
@@ -240,7 +240,7 @@ $(BUILD_DIR)/libs/liblz4.a: deps
 	@echo "\033[1;4;32mBuilding liblz4 ${LZ4_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
 	@echo "\033[36mCompiling liblz4\033[0m"
-	@$(MAKE) lib -j4 -C deps/liblz4-$(LZ4_VERSION) -s 2>&1 > /dev/null
+	@$(MAKE) lib -j4 -C deps/liblz4-$(LZ4_VERSION) CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/liblz4-$(LZ4_VERSION)/lib/liblz4.a $(BUILD_DIR)/libs
 	@cp deps/liblz4-$(LZ4_VERSION)/lib/lz4.h $(BUILD_DIR)/libs
 
@@ -255,24 +255,13 @@ $(BUILD_DIR)/libs/libssl.a: deps
 	@cp deps/openssl-$(OPENSSL_VERSION)/*.a $(BUILD_DIR)/libs
 	@cp -LR deps/openssl-$(OPENSSL_VERSION)/include/openssl $(BUILD_DIR)/libs
 
-$(BUILD_DIR)/libs/libsasl2.a: deps
-	@echo "\033[1;4;32mBuilding sasl ${OPENSSL_VERSION}\033[0m"
-	@mkdir -p $(BUILD_DIR)/libs
-	@echo "\033[36mConfiguring sasl\033[0m"
-	@cd deps/sasl-$(OPENSSL_VERSION); \
-	./config no-shared 2>&1 > /dev/null
-	@echo "\033[36mCompiling sasl\033[0m"
-	@$(MAKE) -j4 -C deps/sasl-$(OPENSSL_VERSION) -s 2>&1 > /dev/null
-	@cp deps/sasl-$(OPENSSL_VERSION)/*.a $(BUILD_DIR)/libs
-	@cp -LR deps/sasl-$(OPENSSL_VERSION)/include/sasl $(BUILD_DIR)/libs
-
 $(BUILD_DIR)/tests/libcmocka.$(DYNAMIC_SUFFIX): test-deps
 	@echo "\033[1;4;32mBuilding libcmocka ${CMOCKA_VERSION}\033[0m"
 	@mkdir -p test-deps/cmocka-$(CMOCKA_VERSION)/build
 	@mkdir -p $(BUILD_DIR)/tests
 	@echo "\033[36mConfiguring libcmocka\033[0m"
 	@cd test-deps/cmocka-$(CMOCKA_VERSION)/build; \
-	cmake .. -DCMAKE_C_FLAGS="-Wno-format-pedantic -w" -Wno-dev 2>&1 > /dev/null
+	cmake .. -DCMAKE_C_FLAGS="-Wno-format-pedantic -w -fPIC" -Wno-dev 2>&1 > /dev/null
 	@echo "\033[36mCompiling libcmocka\033[0m"
 	@$(MAKE) -C test-deps/cmocka-$(CMOCKA_VERSION)/build -s 2>&1 > /dev/null
 	@cd test-deps/cmocka-$(CMOCKA_VERSION)/build; \
@@ -281,7 +270,7 @@ $(BUILD_DIR)/tests/libcmocka.$(DYNAMIC_SUFFIX): test-deps
 
 # librdkafka contains a straight c port of snappy with conflicting symbols for snappy
 # tinycthread is used in multiple edenhill projects, only use one of them
-$(BUILD_DIR)/dependencies.o: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a
+$(BUILD_DIR)/dependencies.o: $(OBJECTS) $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a
 	@echo "\033[1;4;32mCreating libganglion dependency object\033[0m"
 	@cd $(BUILD_DIR)/libs; \
 	mkdir -p librdkafka && cd librdkafka && $(AR) -x ../librdkafka.a && cd ..; \
@@ -302,10 +291,11 @@ $(BUILD_DIR)/dependencies.o: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/li
   ld -r -o dependencies.o libs/*/*.o; \
 	sh -c $(CREATE_ARCHIVE_COMMAND)
 
-$(BUILD_DIR)/libganglion.a: $(OBJECTS) $(BUILD_DIR)/dependencies.o
+$(BUILD_DIR)/libganglion.a: $(BUILD_DIR)/dependencies.o $(OBJECTS)
 	@echo "\033[1;4;32mCreating libganglion static library\033[0m"
 	@cd $(BUILD_DIR); \
-	ar -r libganglion.a ganglion.o
+	ar -r libganglion.a ganglion.o ; \
+	strip -S libganglion.a
 	@echo "\033[36mDone creating libganglion.a\033[0m"
 
 $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a src/examples/basic.c
@@ -315,16 +305,16 @@ $(BUILD_DIR)/example: $(BUILD_DIR)/libganglion.a src/examples/basic.c
 	@strip $@
 	@echo "\033[36mDone compiling $@\033[0m"
 
-$(BUILD_DIR)/go-example: go/examples/basic.go
+$(BUILD_DIR)/go-example: $(BUILD_DIR)/libganglion.a go/examples/basic.go
 	@echo "\033[1;4;32mCompiling basic go example\033[0m"
 	@go get github.com/andrewstucki/libganglion/go
 	@go build -o $@ go/examples/basic.go
 	@echo "\033[36mDone compiling $@\033[0m"
 
-$(BUILD_DIR)/rust-example: rust/examples/basic.rs
+$(BUILD_DIR)/rust-example: $(BUILD_DIR)/libganglion.a rust/examples/basic.rs
 	@echo "\033[1;4;32mCompiling basic rust example\033[0m"
 	@cd rust; \
-	LIBRARY_PATH=../$(BUILD_DIR) cargo build --example basic
+	cargo build --example basic --verbose
 	@cp rust/target/debug/examples/basic $@
 	@echo "\033[36mDone compiling $@\033[0m"
 
