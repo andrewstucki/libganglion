@@ -76,7 +76,7 @@ cpp-example: $(BUILD_DIR)/cpp-example
 examples: example go-example rust-example cpp-example
 
 tests: CFLAGS += -DUNIT_TESTING=1
-tests: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/libganglion.$(DYNAMIC_SUFFIX) $(BUILD_DIR)/tests/libganglion_test_suite
+tests: clean $(BUILD_DIR)/libganglion.a $(BUILD_DIR)/tests/libganglion_test_suite
 
 deps:
 	@echo "\033[1;4;32mDownloading dependant libraries\033[0m"
@@ -196,7 +196,7 @@ $(BUILD_DIR)/libs/libsnappy.a: deps
 	@cd deps/libsnappy-$(SNAPPY_VERSION); \
 	./configure 2>&1 > /dev/null
 	@echo "\033[36mCompiling libsnappy\033[0m"
-	$(MAKE) -j4 -C deps/libsnappy-$(SNAPPY_VERSION) CXXFLAGS="-w -fPIC" -s 2>&1 > /dev/null
+	@$(MAKE) -j4 -C deps/libsnappy-$(SNAPPY_VERSION) CXXFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/libsnappy-$(SNAPPY_VERSION)/.libs/libsnappy.a $(BUILD_DIR)/libs
 	@cp deps/libsnappy-$(SNAPPY_VERSION)/snappy-c.h $(BUILD_DIR)/libs
 
@@ -212,7 +212,7 @@ $(BUILD_DIR)/libs/libserdes.a: $(BUILD_DIR)/libs/libavro.a $(BUILD_DIR)/libs/lib
 	@mkdir -p $(BUILD_DIR)/libs/serdes
 	@cp deps/libserdes-$(SERDES_VERSION)/src/serdes*.h $(BUILD_DIR)/libs/serdes
 
-$(BUILD_DIR)/libs/librdkafka.a: deps $(BUILD_DIR)/libs/liblz4.a
+$(BUILD_DIR)/libs/librdkafka.a: deps $(BUILD_DIR)/libs/liblz4.a $(BUILD_DIR)/libs/libssl.a
 	@echo "\033[1;4;32mBuilding librdkafka ${RDKAFKA_VERSION}\033[0m"
 	@mkdir -p $(BUILD_DIR)/libs
 	@echo "\033[36mConfiguring librdkafka ${RDKAFKA_SSL} ssl support and ${RDKAFKA_SASL} sasl support\033[0m"
@@ -243,7 +243,7 @@ $(BUILD_DIR)/libs/liblz4.a: deps
 	@echo "\033[36mCompiling liblz4\033[0m"
 	@$(MAKE) lib -j4 -C deps/liblz4-$(LZ4_VERSION) CFLAGS="-w -fPIC" -s 2>&1 > /dev/null
 	@cp deps/liblz4-$(LZ4_VERSION)/lib/liblz4.a $(BUILD_DIR)/libs
-	@cp deps/liblz4-$(LZ4_VERSION)/lib/lz4.h $(BUILD_DIR)/libs
+	@cp deps/liblz4-$(LZ4_VERSION)/lib/lz4*.h $(BUILD_DIR)/libs
 
 $(BUILD_DIR)/libs/libssl.a: deps
 	@echo "\033[1;4;32mBuilding openssl ${OPENSSL_VERSION}\033[0m"
@@ -270,8 +270,10 @@ $(BUILD_DIR)/tests/libcmocka.$(DYNAMIC_SUFFIX): test-deps
 	@echo "\033[36mDone compiling libcmocka\033[0m"
 
 # librdkafka contains a straight c port of snappy with conflicting symbols for snappy
-# tinycthread is used in multiple edenhill projects, only use one of them
-$(BUILD_DIR)/ganglion.o: $(OBJECTS) $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a
+# we rename these symbols to avoid the name conflict
+# tinycthread is used in multiple edenhill projects don't bother renaming symbols, they're
+# the same, so just get rid of one of them.
+$(BUILD_DIR)/ganglion.o: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libserdes.a $(OBJECTS)
 	@echo "\033[1;4;32mCreating libganglion dependency object\033[0m"
 	@cd $(BUILD_DIR)/libs; \
 	mkdir -p librdkafka && cd librdkafka && $(AR) -x ../librdkafka.a && cd ..; \
@@ -286,6 +288,7 @@ $(BUILD_DIR)/ganglion.o: $(OBJECTS) $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/
 	mkdir -p libcrypto && cd libcrypto && $(AR) -x ../libcrypto.a
 	@echo "\033[1;4;32mRemoving conflicting symbols\033[0m"
 	@sh -c $(SNAPPY_SYMBOL_CONFLICT_RESOLVE)
+	@rm $(BUILD_DIR)/libs/liblz4/xxhash.o
 	@rm $(BUILD_DIR)/libs/librdkafka/tinycthread.o
 	@echo "\033[1;4;32mRe-linking library dependencies\033[0m"
 	cd $(BUILD_DIR); \
@@ -327,6 +330,7 @@ $(BUILD_DIR)/cpp-example: $(BUILD_DIR)/libganglion.a src/examples/basic.cpp
 	@echo "\033[36mDone compiling $@\033[0m"
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.c $(SOURCE_DIR)/ganglion.h
+	@mkdir -p $(BUILD_DIR) 2>&1 > /dev/null
 	@echo "\033[1;4;32mCompiling $<\033[0m"
 	$(CC) -c $(CFLAGS) $< -o $@
 	@echo "\033[36mDone compiling $<\033[0m"
