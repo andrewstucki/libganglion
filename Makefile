@@ -37,7 +37,7 @@ endif
 ifeq ($(PLATFORM),Darwin)
 		LDFLAGS += -lc++
 		DYNAMIC_SUFFIX = dylib
-		SNAPPY_SYMBOL_CONFLICT_RESOLVE = "ld -r -o $(BUILD_DIR)/libs/librdkafka/rd_kafka_snappy.o $(BUILD_DIR)/libs/librdkafka/snappy.o -alias _snappy_compress _rd_snappy_compress -alias _snappy_uncompress _rd_snappy_uncompress -alias _snappy_max_compressed_length _rd_snappy_max_compressed_length -alias _snappy_uncompressed_length _rd_snappy_uncompressed_length -unexported_symbol _snappy_compress -unexported_symbol _snappy_uncompress -unexported_symbol _snappy_max_compressed_length -unexported_symbol _snappy_uncompressed_length && rm $(BUILD_DIR)/libs/librdkafka/snappy.o"
+		SNAPPY_SYMBOL_CONFLICT_RESOLVE = "rm $(BUILD_DIR)/libs/liblz4/xxhash.o && ld -r -o $(BUILD_DIR)/libs/librdkafka/rd_kafka_snappy.o $(BUILD_DIR)/libs/librdkafka/snappy.o -alias _snappy_compress _rd_snappy_compress -alias _snappy_uncompress _rd_snappy_uncompress -alias _snappy_max_compressed_length _rd_snappy_max_compressed_length -alias _snappy_uncompressed_length _rd_snappy_uncompressed_length -unexported_symbol _snappy_compress -unexported_symbol _snappy_uncompress -unexported_symbol _snappy_max_compressed_length -unexported_symbol _snappy_uncompressed_length && rm $(BUILD_DIR)/libs/librdkafka/snappy.o"
 		CREATE_ARCHIVE_COMMAND = "ld -r -x -exported_symbol "_ganglion*" -o ganglion.o dependencies.o $(patsubst $(BUILD_DIR)/%,%,$(OBJECTS))"
 		OPENSSL_CONFIGURE = "./Configure -fPIC darwin64-x86_64-cc no-shared"
 		TEST_RUNNER = "CMOCKA_TEST_ABORT='1' $(BUILD_DIR)/tests/libganglion_test_suite"
@@ -288,7 +288,6 @@ $(BUILD_DIR)/ganglion.o: $(BUILD_DIR)/libs/librdkafka.a $(BUILD_DIR)/libs/libser
 	mkdir -p libcrypto && cd libcrypto && $(AR) -x ../libcrypto.a
 	@echo "\033[1;4;32mRemoving conflicting symbols\033[0m"
 	@sh -c $(SNAPPY_SYMBOL_CONFLICT_RESOLVE)
-	@rm $(BUILD_DIR)/libs/liblz4/xxhash.o
 	@rm $(BUILD_DIR)/libs/librdkafka/tinycthread.o
 	@echo "\033[1;4;32mRe-linking library dependencies\033[0m"
 	cd $(BUILD_DIR); \
